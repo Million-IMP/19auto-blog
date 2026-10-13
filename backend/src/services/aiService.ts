@@ -8,6 +8,9 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY || '', 
 });
 
+// 환경변수 기반 AI 모델 지정 (기본값: claude-haiku-5-5)
+const AI_MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-5-5';
+
 // 간단한 URL 스크래퍼 (네이버 블로그의 경우 iframe 내부 주소 우회 시도)
 async function extractUrlText(url: string): Promise<string> {
   try {
@@ -60,7 +63,7 @@ ${extractedText}
 `;
 
     const response = await anthropic.messages.create({
-      model: 'claude-haiku-5-5',
+      model: AI_MODEL,
       max_tokens: 2000,
       messages: [{ role: 'user', content: prompt }],
     });
@@ -112,7 +115,7 @@ ${extraContext}
 `;
 
     const response = await anthropic.messages.create({
-      model: 'claude-haiku-5-5',
+      model: AI_MODEL,
       max_tokens: 4000,
       system: "You are a helpful assistant that only outputs strictly formatted XML.",
       messages: [{ role: 'user', content: prompt }],
@@ -193,7 +196,7 @@ ${ruleTemplates.length > 0 ? ruleTemplates.map((r, i) => `${i + 1}. ${r}`).join(
 `;
 
     const response = await anthropic.messages.create({
-      model: 'claude-haiku-5-5',
+      model: AI_MODEL,
       max_tokens: 4000,
       messages: [{ role: 'user', content: prompt }],
     });
@@ -252,7 +255,7 @@ ${platformGuide}
 `;
 
     const response = await anthropic.messages.create({
-      model: 'claude-haiku-5-5',
+      model: AI_MODEL,
       max_tokens: 1500,
       messages: [{ role: 'user', content: prompt }],
     });
@@ -285,7 +288,7 @@ ${text.slice(0, 3500)}
 `;
 
     const response = await anthropic.messages.create({
-      model: 'claude-haiku-5-5',
+      model: AI_MODEL,
       max_tokens: 1000,
       system: "You are an expert editorial consultant. Output strictly formatted XML tags as instructed.",
       messages: [{ role: 'user', content: prompt }],

@@ -1,6 +1,9 @@
-﻿node_modules
+node_modules
 .env
 *.db
 *.db-journal
 dist
 .bkit
+*.log
+backend/test-*.ts
+backend/scratch-*.ts
