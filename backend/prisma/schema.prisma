@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// 0 수집함 (Raw Inbox)
+model Inbox {
+  id        Int      @id @default(autoincrement())
+  content   String   // Text or URL
+  type      String   @default("TEXT") // TEXT, URL, IMAGE
+  createdAt DateTime @default(now())
+  processed Boolean  @default(false) // True if moved to Material or Rule
+}
+
+// 1 재료 (Material)
+model Material {
+  id          Int      @id @default(autoincrement())
+  title       String?
+  content     String
+  keyword     String?  // Associated keyword
+  inboxId     Int?     // Origin from Inbox
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  isArchived  Boolean  @default(false) // If moved to 9 보관
+}
+
+// 2 규칙 (Rule)
+model Rule {
+  id          Int      @id @default(autoincrement())
+  title       String
+  content     String
+  type        String   @default("TONE") // TONE, TEMPLATE, INSIGHT
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  isActive    Boolean  @default(true) // Whether to apply this rule
+}
+
+// 3 발행 & 초안 (Post)
+model Post {
+  id            Int      @id @default(autoincrement())
+  title         String
+  content       String   // HTML or Markdown
+  status        String   @default("DRAFT") // DRAFT, PUBLISHED
+  keyword       String?
+  publishedUrl  String?
+  platform      String   @default("NAVER_BLOG") // NAVER_BLOG, INSTA, SHORTS, THREADS
+  parentPostId  Int?     // For OSMU (e.g. this is a short version of a blog post)
+  parent        Post?    @relation("OSMU", fields: [parentPostId], references: [id])
+  derivatives   Post[]   @relation("OSMU")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// 4 시스템 로그 (Cron 등 자동화 기록)
+model SystemLog {
+  id        Int      @id @default(autoincrement())
+  event     String   // e.g., "CRON_RSS_TECHCRUNCH"
+  message   String   // e.g., "새로운 기사 3건 수집 완료"
+  createdAt DateTime @default(now())
+}
+
+// 5 RSS 수집 채널 (RSS Feeds)
+model RssFeed {
+  id        Int      @id @default(autoincrement())
+  name      String
+  url       String
+  category  String?  @default("IT")
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
