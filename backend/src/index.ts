@@ -10,6 +10,13 @@ import cron from 'node-cron';
 
 const app = express();
 
+process.on('uncaughtException', (err) => {
+  console.error('💥 [Uncaught Exception]:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('💥 [Unhandled Rejection]:', reason);
+});
+
 app.use(cors());
 app.use(express.json());
 
@@ -561,14 +568,13 @@ app.get('/api/system-logs', async (req, res) => {
   res.json(logs);
 });
 
-// 스케줄러 봇: 매시간 정각에 활성 RSS 피드들을 순회 수집 (0 * * * *)
-cron.schedule('0 * * * *', async () => {
-  console.log('🤖 [Cron] 매시간 정각 멀티 RSS 수집을 시작합니다...');
+export async function runHourlyPipeline() {
+  console.log('🤖 [Cron] 정기 RSS 수집을 시작합니다...');
   try {
     const addedCount = await fetchAllActiveRssFeeds();
     const msg = addedCount > 0 ? `새로운 기사 ${addedCount}건 수집 완료.` : '새로운 기사 없음.';
     console.log(`🤖 [Cron] ${msg}`);
-    
+
     await prisma.systemLog.create({
       data: {
         event: 'CRON_RSS_MULTI',
@@ -588,10 +594,38 @@ cron.schedule('0 * * * *', async () => {
         message: `RSS 수집 실패: ${error.message}`
       }
     });
+    throw error;
+  }
+}
+
+app.get('/api/cron/daily', async (req, res) => {
+  const secret = process.env.CRON_SECRET || '';
+  if (!secret || req.get('authorization') !== `Bearer ${secret}`) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  try {
+    await runHourlyPipeline();
+    res.json({ ok: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-  console.log('🤖 [Cron] 스케줄러 봇이 활성화되었습니다 (매시간 정각, 수집 후 자동 작성)');
-});
+if (!process.env.VERCEL) {
+  if (process.env.DISABLE_LOCAL_CRON === '1') {
+    console.log('🤖 [Cron] 로컬 스케줄러는 꺼져 있습니다. 버셀 크론이 수집을 담당합니다.');
+  } else {
+    cron.schedule('0 * * * *', () => {
+      runHourlyPipeline().catch((error) => {
+        console.error('🤖 [Cron] 처리되지 않은 오류:', error);
+      });
+    });
+    console.log('🤖 [Cron] 스케줄러 봇이 활성화되었습니다 (매시간 정각, 수집 후 자동 작성)');
+  }
+
+  app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+  });
+}
+
+export default app;

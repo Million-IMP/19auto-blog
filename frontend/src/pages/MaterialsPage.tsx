@@ -19,7 +19,7 @@ export function MaterialsPage() {
   const loadMaterials = () => {
     const seq = ++requestSeq.current;
     setLoadError('');
-    axios.get('http://localhost:3001/api/materials')
+    axios.get('/api/materials')
       .then((res) => {
         if (seq !== requestSeq.current) return;
         setItems(res.data);
@@ -40,7 +40,7 @@ export function MaterialsPage() {
     if (!extractUrl.trim()) return alert("URL을 입력해주세요.");
     setIsExtracting(true);
     try {
-      const res = await axios.post('http://localhost:3001/api/materials/extract', { url: extractUrl });
+      const res = await axios.post('/api/materials/extract', { url: extractUrl });
       setTitle(res.data.title);
       setContent(res.data.content);
       alert("구조 추출이 완료되었습니다. 내용을 확인하고 '템플릿 추가하기'를 눌러 저장하세요.");
@@ -55,7 +55,7 @@ export function MaterialsPage() {
     e.preventDefault();
     if (!content.trim()) return;
     try {
-      await axios.post('http://localhost:3001/api/materials', {
+      await axios.post('/api/materials', {
         title: title.trim() || "기본 글감 구조",
         content: content,
       });
@@ -69,7 +69,7 @@ export function MaterialsPage() {
 
   const handleToggleActive = async (id: number) => {
     try {
-      await axios.put(`http://localhost:3001/api/materials/${id}/toggle`);
+      await axios.put(`/api/materials/${id}/toggle`);
       loadMaterials();
     } catch (e: any) {
       alert(e.response?.data?.error || '기본 적용을 바꾸지 못했습니다.');
@@ -86,7 +86,7 @@ export function MaterialsPage() {
     if (editingId == null) return;
     if (!editContent.trim()) return alert('내용을 입력해주세요.');
     try {
-      await axios.put(`http://localhost:3001/api/materials/${editingId}`, {
+      await axios.put(`/api/materials/${editingId}`, {
         title: editTitle.trim() || '기본 글감 구조',
         content: editContent,
       });
@@ -100,7 +100,7 @@ export function MaterialsPage() {
   const handleDelete = async (id: number) => {
     if (!confirm("이 템플릿을 삭제하시겠습니까?")) return;
     try {
-      await axios.delete(`http://localhost:3001/api/materials/${id}`);
+      await axios.delete(`/api/materials/${id}`);
       loadMaterials();
     } catch (e: any) {
       alert(e.response?.data?.error || "삭제 중 오류가 발생했습니다.");

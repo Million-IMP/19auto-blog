@@ -6,7 +6,7 @@ import {
   Sun, Moon, FileText, CheckCheck
 } from 'lucide-react';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = '/api';
 
 function apiErrorMessage(error: unknown, fallback: string) {
   const body = (error as { response?: { data?: { error?: string } } })?.response?.data?.error;

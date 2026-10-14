@@ -95,7 +95,7 @@ function Dashboard() {
   const [running, setRunning] = useState(false);
 
   const load = () => {
-    fetch('http://localhost:3001/api/stats')
+    fetch('/api/stats')
       .then(async (r) => {
         const body = await r.json();
         if (!r.ok) throw new Error(body.error || '집계를 불러오지 못했습니다.');
@@ -103,7 +103,7 @@ function Dashboard() {
       })
       .catch((e: Error) => setError(e.message || '집계를 불러오지 못했습니다.'));
 
-    fetch('http://localhost:3001/api/automation')
+    fetch('/api/automation')
       .then(async (r) => {
         const body = await r.json();
         if (!r.ok) throw new Error(body.error || '자동 작성 설정을 불러오지 못했습니다.');
@@ -111,7 +111,7 @@ function Dashboard() {
       })
       .catch((e: Error) => setError(e.message || '자동 작성 설정을 불러오지 못했습니다.'));
 
-    fetch('http://localhost:3001/api/materials')
+    fetch('/api/materials')
       .then(async (r) => {
         const body = await r.json();
         if (!r.ok) return;
@@ -129,7 +129,7 @@ function Dashboard() {
     setSaving(true);
     setAutoMsg('');
     try {
-      const r = await fetch('http://localhost:3001/api/automation', {
+      const r = await fetch('/api/automation', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(auto),
@@ -149,7 +149,7 @@ function Dashboard() {
     setRunning(true);
     setAutoMsg('수집을 확인하고 초안을 작성하는 중입니다.');
     try {
-      const r = await fetch('http://localhost:3001/api/automation/run', {
+      const r = await fetch('/api/automation/run', {
         method: 'POST',
         signal: AbortSignal.timeout(180000),
       });
@@ -247,7 +247,7 @@ function Dashboard() {
           <div>
             <h3 className="text-sm font-semibold text-slate-800">자동 작성</h3>
             <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-              매시간 정각에 새 글을 모은 뒤, 아직 초안이 없는 최신 수집 항목을 네이버 블로그 초안으로 만듭니다.
+              매일 오전 9시(한국시간)에 새 글을 모은 뒤, 아직 초안이 없는 최신 수집 항목을 네이버 블로그 초안으로 만듭니다.
               채널에 규칙이나 글감이 있으면 그것을 먼저 씁니다. 여기 글 뼈대는 채널에 글감이 없을 때의 기본입니다.
               한 번에 최대 3건입니다. 발행 URL은 발행 대기열에서 기록합니다.
             </p>

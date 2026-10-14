@@ -7,3 +7,7 @@ dist
 *.log
 backend/test-*.ts
 backend/scratch-*.ts
+.vercel
+.env*
+!.env.example
+backend/prisma/schema.postgres.prisma

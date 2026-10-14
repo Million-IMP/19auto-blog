@@ -1,0 +1,23 @@
+{
+  "framework": null,
+  "installCommand": "npm install && npm install --prefix frontend",
+  "buildCommand": "node scripts/prepare-db.js && npm run build --prefix frontend",
+  "outputDirectory": "frontend/dist",
+  "rewrites": [
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "functions": {
+    "api/[[...path]].ts": {
+      "maxDuration": 60
+    },
+    "api/cron/daily.ts": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/daily",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}

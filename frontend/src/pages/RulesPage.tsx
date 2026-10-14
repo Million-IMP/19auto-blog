@@ -20,7 +20,7 @@ export function RulesPage() {
   const [editType, setEditType] = useState('TONE');
 
   const fetchRules = () => {
-    axios.get('http://localhost:3001/api/rules').then(res => setItems(res.data));
+    axios.get('/api/rules').then(res => setItems(res.data));
   };
 
   useEffect(() => {
@@ -31,7 +31,7 @@ export function RulesPage() {
     e.preventDefault();
     if (!content.trim()) return;
     try {
-      await axios.post('http://localhost:3001/api/rules', {
+      await axios.post('/api/rules', {
         title: title.trim() || "새 규칙 템플릿",
         content: content,
         type: type
@@ -48,7 +48,7 @@ export function RulesPage() {
   const handleDelete = async (id: number) => {
     if (!confirm("이 규칙을 삭제하시겠습니까?")) return;
     try {
-      await axios.delete(`http://localhost:3001/api/rules/${id}`);
+      await axios.delete(`/api/rules/${id}`);
       fetchRules();
     } catch (e) {
       alert("삭제 중 오류가 발생했습니다.");
@@ -57,7 +57,7 @@ export function RulesPage() {
 
   const handleToggleActive = async (id: number) => {
     try {
-      await axios.put(`http://localhost:3001/api/rules/${id}/toggle`);
+      await axios.put(`/api/rules/${id}/toggle`);
       fetchRules();
     } catch (e) {
       alert("상태 변경 중 오류가 발생했습니다.");
@@ -75,7 +75,7 @@ export function RulesPage() {
     if (editingId == null) return;
     if (!editContent.trim()) return alert('내용을 입력해주세요.');
     try {
-      await axios.put(`http://localhost:3001/api/rules/${editingId}`, {
+      await axios.put(`/api/rules/${editingId}`, {
         title: editTitle.trim() || '새 규칙 템플릿',
         content: editContent,
         type: editType,

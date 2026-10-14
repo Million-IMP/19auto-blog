@@ -5,7 +5,7 @@ import { PenTool, CheckCircle, Copy, Trash2, Link2, Video, Image as ImageIcon, M
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = '/api';
 
 function apiErrorMessage(error: unknown, fallback: string) {
   const body = (error as { response?: { data?: { error?: string } } })?.response?.data?.error;
