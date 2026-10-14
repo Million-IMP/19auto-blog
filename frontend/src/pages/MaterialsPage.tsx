@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import axios from 'axios';
 import { Trash2, PenTool, Link as LinkIcon, Wand2 } from 'lucide-react';
 
@@ -9,13 +9,31 @@ export function MaterialsPage() {
   
   const [extractUrl, setExtractUrl] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [viewReady, setViewReady] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const requestSeq = useRef(0);
 
-  const fetchMaterials = () => {
-    axios.get('http://localhost:3001/api/materials').then(res => setItems(res.data));
+  const loadMaterials = () => {
+    const seq = ++requestSeq.current;
+    setLoadError('');
+    axios.get('http://localhost:3001/api/materials')
+      .then((res) => {
+        if (seq !== requestSeq.current) return;
+        setItems(res.data);
+        setViewReady(true);
+      })
+      .catch((e) => {
+        if (seq === requestSeq.current) {
+          setLoadError(e.response?.data?.error || '재료 목록을 불러오지 못했습니다.');
+        }
+      });
   };
 
   useEffect(() => {
-    fetchMaterials();
+    loadMaterials();
   }, []);
 
   const handleExtract = async () => {
@@ -43,9 +61,39 @@ export function MaterialsPage() {
       });
       setTitle('');
       setContent('');
-      fetchMaterials();
-    } catch (e) {
-      alert("추가 중 오류가 발생했습니다.");
+      loadMaterials();
+    } catch (e: any) {
+      alert(e.response?.data?.error || "추가 중 오류가 발생했습니다.");
+    }
+  };
+
+  const handleToggleActive = async (id: number) => {
+    try {
+      await axios.put(`http://localhost:3001/api/materials/${id}/toggle`);
+      loadMaterials();
+    } catch (e: any) {
+      alert(e.response?.data?.error || '기본 적용을 바꾸지 못했습니다.');
+    }
+  };
+
+  const startEdit = (item: { id: number; title?: string | null; content?: string | null }) => {
+    setEditingId(item.id);
+    setEditTitle(item.title || '');
+    setEditContent(item.content || '');
+  };
+
+  const handleSaveEdit = async () => {
+    if (editingId == null) return;
+    if (!editContent.trim()) return alert('내용을 입력해주세요.');
+    try {
+      await axios.put(`http://localhost:3001/api/materials/${editingId}`, {
+        title: editTitle.trim() || '기본 글감 구조',
+        content: editContent,
+      });
+      setEditingId(null);
+      loadMaterials();
+    } catch (e: any) {
+      alert(e.response?.data?.error || '수정 중 오류가 발생했습니다.');
     }
   };
 
@@ -53,9 +101,9 @@ export function MaterialsPage() {
     if (!confirm("이 템플릿을 삭제하시겠습니까?")) return;
     try {
       await axios.delete(`http://localhost:3001/api/materials/${id}`);
-      fetchMaterials();
-    } catch (e) {
-      alert("삭제 중 오류가 발생했습니다.");
+      loadMaterials();
+    } catch (e: any) {
+      alert(e.response?.data?.error || "삭제 중 오류가 발생했습니다.");
     }
   };
 
@@ -117,29 +165,77 @@ export function MaterialsPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {items.length === 0 && (
+        {loadError && (
+          <div className="col-span-full py-8 text-center bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{loadError}</div>
+        )}
+        {!loadError && !viewReady && (
+          <div className="col-span-full py-12 text-center text-slate-400 text-sm">불러오는 중...</div>
+        )}
+        {!loadError && viewReady && items.length === 0 && (
           <div className="col-span-full py-12 text-center bg-white border border-dashed border-slate-300 rounded-lg text-slate-500 text-sm">
-            등록된 재료 템플릿이 없습니다.<br/>위에서 자주 쓰는 글의 구조를 등록해보세요!
+            <>등록된 재료 템플릿이 없습니다.<br/>위에서 자주 쓰는 글의 구조를 등록해보세요!</>
           </div>
         )}
-        {items.map(item => (
-          <div key={item.id} className="bg-white p-5 rounded-lg shadow-sm border border-slate-200 hover:border-emerald-300 transition relative group flex flex-col min-h-[140px]">
+        {viewReady && items.map(item => {
+          const editing = editingId === item.id;
+          return (
+          <div key={item.id} className={`bg-white p-5 rounded-lg shadow-sm border transition flex flex-col min-h-[140px] ${item.isActive ? 'border-orange-300 ring-1 ring-orange-300' : 'border-slate-200'}`}>
             <div className="flex-1">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                <h3 className="text-sm font-bold text-slate-800">{item.title || "글감 템플릿"}</h3>
-              </div>
-              <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-wrap pr-4">{item.content}</p>
+              {editing ? (
+                <div className="flex flex-col gap-2">
+                  <input
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full p-2 text-sm border border-emerald-300 rounded-md font-semibold"
+                    aria-label="재료 이름"
+                  />
+                  <textarea
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    rows={5}
+                    className="w-full p-2 text-sm border border-emerald-300 rounded-md resize-y"
+                    aria-label="재료 내용"
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <h3 className="text-sm font-bold text-slate-800">{item.title || "글감 템플릿"}</h3>
+                  </div>
+                  <p className={`text-sm leading-relaxed whitespace-pre-wrap ${item.isActive ? 'text-slate-700' : 'text-slate-500'}`}>{item.content}</p>
+                </>
+              )}
             </div>
-            <button 
-              onClick={() => handleDelete(item.id)}
-              className="absolute top-4 right-4 text-slate-300 hover:text-red-500 bg-white hover:bg-red-50 p-1.5 rounded transition opacity-0 group-hover:opacity-100 shadow-sm border border-transparent group-hover:border-red-100"
-              title="삭제"
-            >
-              <Trash2 size={14} />
-            </button>
+            <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center gap-2">
+              <label className="flex items-center gap-2 cursor-pointer group">
+                <div className={`w-10 h-5 rounded-full p-1 flex items-center transition-colors duration-200 ease-in-out ${item.isActive ? 'bg-orange-500' : 'bg-slate-300'}`}>
+                  <div className={`bg-white w-3 h-3 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${item.isActive ? 'translate-x-5' : 'translate-x-0'}`}></div>
+                </div>
+                <input type="checkbox" className="hidden" checked={!!item.isActive} onChange={() => handleToggleActive(item.id)} />
+                <span className={`text-xs font-semibold ${item.isActive ? 'text-orange-600' : 'text-slate-400 group-hover:text-slate-600'}`}>
+                  {item.isActive ? '발행 대기열 기본 적용 중' : '기본 적용 안함'}
+                </span>
+              </label>
+              <div className="flex gap-2">
+                {editing ? (
+                  <>
+                    <button type="button" onClick={handleSaveEdit} className="text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1.5 rounded-md">저장</button>
+                    <button type="button" onClick={() => setEditingId(null)} className="text-xs font-semibold text-slate-600 bg-white px-2.5 py-1.5 rounded-md border border-slate-300">취소</button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" onClick={() => startEdit(item)} className="text-xs font-semibold text-slate-700 bg-white hover:bg-emerald-50 px-2.5 py-1.5 rounded-md border border-slate-300">수정</button>
+                    <button type="button" onClick={() => handleDelete(item.id)} className="text-xs font-semibold text-red-600 bg-white hover:bg-red-50 px-2.5 py-1.5 rounded-md border border-red-200 inline-flex items-center gap-1">
+                      <Trash2 size={14} /> 삭제
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

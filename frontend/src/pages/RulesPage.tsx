@@ -1,12 +1,23 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Trash2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Trash2, AlertCircle } from 'lucide-react';
+
+const RULE_TYPES = [
+  { value: 'TONE', label: '말투/어조' },
+  { value: 'FORMAT', label: '작성 형식' },
+  { value: 'PROHIBITED', label: '금지사항' },
+  { value: 'INSIGHT', label: '기타 인사이트' },
+];
 
 export function RulesPage() {
   const [items, setItems] = useState<any[]>([]);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [type, setType] = useState('TONE');
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editContent, setEditContent] = useState('');
+  const [editType, setEditType] = useState('TONE');
 
   const fetchRules = () => {
     axios.get('http://localhost:3001/api/rules').then(res => setItems(res.data));
@@ -53,6 +64,29 @@ export function RulesPage() {
     }
   };
 
+  const startEdit = (item: { id: number; title?: string | null; content?: string | null; type?: string | null }) => {
+    setEditingId(item.id);
+    setEditTitle(item.title || '');
+    setEditContent(item.content || '');
+    setEditType(item.type || 'TONE');
+  };
+
+  const handleSaveEdit = async () => {
+    if (editingId == null) return;
+    if (!editContent.trim()) return alert('내용을 입력해주세요.');
+    try {
+      await axios.put(`http://localhost:3001/api/rules/${editingId}`, {
+        title: editTitle.trim() || '새 규칙 템플릿',
+        content: editContent,
+        type: editType,
+      });
+      setEditingId(null);
+      fetchRules();
+    } catch (e: any) {
+      alert(e.response?.data?.error || '수정 중 오류가 발생했습니다.');
+    }
+  };
+
   const getTypeLabel = (t: string) => {
     if (t === 'TONE') return { label: '말투/어조', color: 'bg-indigo-100 text-indigo-700 border-indigo-200' };
     if (t === 'FORMAT') return { label: '작성 형식', color: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
@@ -78,10 +112,7 @@ export function RulesPage() {
               onChange={(e) => setType(e.target.value)}
               className="w-36 p-2.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:border-orange-500 bg-slate-50 font-semibold text-slate-700"
             >
-              <option value="TONE">말투/어조</option>
-              <option value="FORMAT">작성 형식</option>
-              <option value="PROHIBITED">금지사항</option>
-              <option value="INSIGHT">기타 인사이트</option>
+              {RULE_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
             <input 
               type="text" 
@@ -112,17 +143,46 @@ export function RulesPage() {
         )}
         {items.map(item => {
           const typeInfo = getTypeLabel(item.type);
+          const editing = editingId === item.id;
           return (
             <div key={item.id} className={`bg-white p-5 rounded-lg shadow-sm border transition relative flex flex-col min-h-[140px] ${item.isActive ? 'border-orange-300 ring-1 ring-orange-300' : 'border-slate-200'}`}>
               <div className="flex-1">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${typeInfo.color}`}>{typeInfo.label}</span>
-                  <h3 className="text-sm font-bold text-slate-800">{item.title || "새 규칙 템플릿"}</h3>
-                </div>
-                <p className={`text-sm leading-relaxed whitespace-pre-wrap pr-4 ${item.isActive ? 'text-slate-700' : 'text-slate-400'}`}>{item.content}</p>
+                {editing ? (
+                  <div className="flex flex-col gap-2">
+                    <select
+                      value={editType}
+                      onChange={(e) => setEditType(e.target.value)}
+                      className="w-full p-2 text-sm border border-orange-300 rounded-md bg-white font-semibold"
+                      aria-label="규칙 유형"
+                    >
+                      {RULE_TYPES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                    <input
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      className="w-full p-2 text-sm border border-orange-300 rounded-md font-semibold"
+                      aria-label="규칙 이름"
+                    />
+                    <textarea
+                      value={editContent}
+                      onChange={(e) => setEditContent(e.target.value)}
+                      rows={5}
+                      className="w-full p-2 text-sm border border-orange-300 rounded-md resize-y"
+                      aria-label="규칙 내용"
+                    />
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-bold border ${typeInfo.color}`}>{typeInfo.label}</span>
+                      <h3 className="text-sm font-bold text-slate-800">{item.title || "새 규칙 템플릿"}</h3>
+                    </div>
+                    <p className={`text-sm leading-relaxed whitespace-pre-wrap pr-4 ${item.isActive ? 'text-slate-700' : 'text-slate-400'}`}>{item.content}</p>
+                  </>
+                )}
               </div>
               
-              <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center">
+              <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center gap-2">
                 <label className="flex items-center gap-2 cursor-pointer group">
                   <div className={`w-10 h-5 rounded-full p-1 flex items-center transition-colors duration-200 ease-in-out ${item.isActive ? 'bg-orange-500' : 'bg-slate-300'}`}>
                     <div className={`bg-white w-3 h-3 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${item.isActive ? 'translate-x-5' : 'translate-x-0'}`}></div>
@@ -132,13 +192,21 @@ export function RulesPage() {
                     {item.isActive ? '발행 대기열 기본 적용 중' : '기본 적용 안함'}
                   </span>
                 </label>
-                <button 
-                  onClick={() => handleDelete(item.id)}
-                  className="text-slate-300 hover:text-red-500 bg-white hover:bg-red-50 p-1.5 rounded transition shadow-sm border border-transparent hover:border-red-100"
-                  title="삭제"
-                >
-                  <Trash2 size={14} />
-                </button>
+                <div className="flex gap-2">
+                  {editing ? (
+                    <>
+                      <button type="button" onClick={handleSaveEdit} className="text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 px-2.5 py-1.5 rounded-md">저장</button>
+                      <button type="button" onClick={() => setEditingId(null)} className="text-xs font-semibold text-slate-600 bg-white px-2.5 py-1.5 rounded-md border border-slate-300">취소</button>
+                    </>
+                  ) : (
+                    <>
+                      <button type="button" onClick={() => startEdit(item)} className="text-xs font-semibold text-slate-700 bg-white hover:bg-orange-50 px-2.5 py-1.5 rounded-md border border-slate-300">수정</button>
+                      <button type="button" onClick={() => handleDelete(item.id)} className="text-xs font-semibold text-red-600 bg-white hover:bg-red-50 px-2.5 py-1.5 rounded-md border border-red-200 inline-flex items-center gap-1">
+                        <Trash2 size={14} /> 삭제
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           );

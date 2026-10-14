@@ -1,12 +1,24 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
-import { PenTool, CheckCircle, Copy, Trash2, Link2, Share2, Video, Image as ImageIcon, MessageCircle, Eye, EyeOff, Edit3, Save, X, BarChart2, Sparkles, FileCheck } from 'lucide-react';
+import { PenTool, CheckCircle, Copy, Trash2, Link2, Video, Image as ImageIcon, MessageCircle, Eye, EyeOff, Edit3, Save, X, BarChart2, FileCheck } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 const API_URL = 'http://localhost:3001/api';
 
+function apiErrorMessage(error: unknown, fallback: string) {
+  const body = (error as { response?: { data?: { error?: string } } })?.response?.data?.error;
+  return body || fallback;
+}
+
 export function PostsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const statusFilter = searchParams.get('status') === 'published'
+    ? 'published'
+    : searchParams.get('status') === 'draft'
+      ? 'draft'
+      : 'all';
   const [inboxes, setInboxes] = useState<any[]>([]);
   const [materials, setMaterials] = useState<any[]>([]);
   const [rules, setRules] = useState<any[]>([]);
@@ -47,15 +59,25 @@ export function PostsPage() {
     // 처리 안된 수집함 데이터만 보여줌
     setInboxes(resInboxes.data.filter((i: any) => !i.processed));
     setMaterials(resMaterials.data);
-    
-    // 규칙은 모두 불러오되, isActive가 true인 것만 기본으로 선택되게 합니다.
     setRules(resRules.data);
-    setSelectedRuleIds(resRules.data.filter((r: any) => r.isActive).map((r: any) => r.id));
   };
 
   const fetchPosts = () => {
-    axios.get(`${API_URL}/posts`).then(res => setPosts(res.data));
+    axios.get(`${API_URL}/posts`).then(res => setPosts(res.data)).catch((e) => {
+      alert(apiErrorMessage(e, "초안 목록을 불러오지 못했습니다."));
+    });
   }
+
+  const visiblePosts = posts.filter((post) => {
+    if (statusFilter === 'draft') return post.status === 'DRAFT';
+    if (statusFilter === 'published') return post.status === 'PUBLISHED';
+    return true;
+  });
+
+  const setStatusFilter = (next: 'all' | 'draft' | 'published') => {
+    if (next === 'all') setSearchParams({});
+    else setSearchParams({ status: next });
+  };
 
   const toggleSelectInbox = (id: number) => setSelectedInboxIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   const toggleSelectMaterial = (id: number) => setSelectedMaterialIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
@@ -77,9 +99,9 @@ export function PostsPage() {
       setKeyword('');
       setSelectedInboxIds([]);
       setSelectedMaterialIds([]);
-      // setSelectedRuleIds([]) 는 삭제함. fetchFormData 안에서 기본 활성 규칙들을 다시 세팅해주기 때문.
+      setSelectedRuleIds([]);
     } catch (e) {
-      alert("글 생성 중 오류가 발생했습니다.");
+      alert(apiErrorMessage(e, "글 생성 중 오류가 발생했습니다."));
     }
     setGenerating(false);
   };
@@ -92,7 +114,7 @@ export function PostsPage() {
       alert("발행 완료 처리되었습니다.");
       fetchPosts();
     } catch (e) {
-      alert("처리 중 오류가 발생했습니다.");
+      alert(apiErrorMessage(e, "처리 중 오류가 발생했습니다."));
     }
   };
 
@@ -103,7 +125,7 @@ export function PostsPage() {
       alert(`${platform}용 콘텐츠가 생성되었습니다!`);
       fetchPosts();
     } catch (e) {
-      alert("OSMU 변환 중 오류가 발생했습니다.");
+      alert(apiErrorMessage(e, "OSMU 변환 중 오류가 발생했습니다."));
     }
     setOsmuLoading(null);
   };
@@ -130,7 +152,7 @@ export function PostsPage() {
       setEditingPostId(null);
       fetchPosts();
     } catch (e) {
-      alert("수정 저장 중 오류가 발생했습니다.");
+      alert(apiErrorMessage(e, "수정 저장 중 오류가 발생했습니다."));
     }
   };
 
@@ -187,6 +209,7 @@ export function PostsPage() {
           <div className="mb-5 shrink-0">
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">타겟 키워드 (선택)</label>
             <input type="text" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="비워두시면 AI가 자동 도출" className="w-full p-2.5 text-sm border border-slate-300 rounded-md focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-slate-50" />
+            <p className="mt-2 text-[11px] leading-relaxed text-slate-500">수집 자료의 RSS 채널에 규칙이 있으면 그 규칙을 먼저 씁니다. 키워드를 적으면 그 키워드를 따릅니다. 글감과 규칙을 고르지 않으면 기본 글쓰기로 진행합니다.</p>
           </div>
           
           <div className="space-y-6 overflow-y-auto pr-1 pb-2 flex-1 scrollbar-thin">
@@ -254,18 +277,32 @@ export function PostsPage() {
         <div className="px-6 py-4 bg-white border-b border-slate-200 flex justify-between items-center shrink-0">
           <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-green-500"></div>
-            3 발행 대기열 ({posts.length})
+            3 발행 대기열 ({visiblePosts.length})
           </h2>
+          <div className="flex gap-1">
+            {([['all', '전체'], ['draft', '초안'], ['published', '발행']] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setStatusFilter(key)}
+                className={`text-xs font-semibold px-2.5 py-1 rounded-md border ${statusFilter === key ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
-          {posts.length === 0 && (
+          {visiblePosts.length === 0 && (
              <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-3">
                <PenTool size={32} className="opacity-20" />
-               <p className="text-sm">생성된 초안이 없습니다. 왼쪽 패널에서 생성해보세요.</p>
+               <p className="text-sm">
+                 {statusFilter === 'published' ? '발행된 글이 없습니다.' : statusFilter === 'draft' ? '대기 중인 초안이 없습니다.' : '생성된 초안이 없습니다. 왼쪽 패널에서 생성해보세요.'}
+               </p>
              </div>
           )}
-          {posts.map(post => {
+          {visiblePosts.map(post => {
             const seo = getSeoStats(post.content, post.keyword);
             const isEditing = editingPostId === post.id;
 
@@ -321,8 +358,12 @@ export function PostsPage() {
                     )}
                     <button onClick={async () => {
                       if (confirm("이 초안을 삭제하시겠습니까?")) {
-                        await axios.delete(`${API_URL}/posts/${post.id}`);
-                        fetchPosts();
+                        try {
+                          await axios.delete(`${API_URL}/posts/${post.id}`);
+                          fetchPosts();
+                        } catch (e) {
+                          alert(apiErrorMessage(e, "삭제 중 오류가 발생했습니다."));
+                        }
                       }
                     }} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition" title="삭제">
                       <Trash2 size={16}/>

@@ -1,12 +1,13 @@
 import express from 'express';
 import cors from 'cors';
-import { PrismaClient } from '@prisma/client';
 import { aiService } from './services/aiService';
 import { scrapeArticle } from './services/scraperService';
+import { getAutomationConfig, runAutomationCycle, updateAutomationConfig } from './services/automationService';
+import { resolveDraftInputs } from './services/writingPlan';
+import { prisma } from './db';
 import Parser from 'rss-parser';
 import cron from 'node-cron';
 
-const prisma = new PrismaClient();
 const app = express();
 
 app.use(cors());
@@ -16,6 +17,31 @@ const PORT = process.env.PORT || 3001;
 const parser = new Parser();
 
 // --- 0 수집함 (Inbox) ---
+app.get('/api/stats', async (req, res) => {
+  try {
+    const [inboxUnprocessed, materialsActive, drafts, published, activeRss, lastLog] = await Promise.all([
+      prisma.inbox.count({ where: { processed: false } }),
+      prisma.material.count({ where: { isArchived: false } }),
+      prisma.post.count({ where: { status: 'DRAFT' } }),
+      prisma.post.count({ where: { status: 'PUBLISHED' } }),
+      prisma.rssFeed.count({ where: { isActive: true } }),
+      prisma.systemLog.findFirst({ orderBy: { createdAt: 'desc' } }),
+    ]);
+    res.json({
+      inboxUnprocessed,
+      materialsActive,
+      drafts,
+      published,
+      activeRss,
+      lastLog: lastLog
+        ? { event: lastLog.event, message: lastLog.message, createdAt: lastLog.createdAt }
+        : null,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/inbox', async (req, res) => {
   const items = await prisma.inbox.findMany({ orderBy: { createdAt: 'desc' } });
   res.json(items);
@@ -48,7 +74,7 @@ async function fetchAllActiveRssFeeds() {
 
         if (!existing) {
           await prisma.inbox.create({
-            data: { content, type: 'TEXT' }
+            data: { content, type: 'TEXT', rssFeedId: feedConfig.id }
           });
           totalAddedCount++;
         }
@@ -61,19 +87,72 @@ async function fetchAllActiveRssFeeds() {
 }
 
 // RSS 채널 관리 API
+const feedInclude = {
+  rules: { select: { id: true, title: true } },
+  materials: { select: { id: true, title: true } },
+} as const;
+
+function ruleIdList(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map(Number).filter((id) => Number.isInteger(id) && id > 0);
+}
+
+async function saveFeedWriting(id: number, body: { name?: string; url?: string; category?: string; templateMaterialId?: number | null; materialIds?: unknown; ruleIds?: unknown }) {
+  const name = String(body.name || '').trim();
+  const url = String(body.url || '').trim();
+  if (!name || !url) throw new Error('채널명과 RSS URL을 입력해주세요.');
+  const ruleIds = ruleIdList(body.ruleIds);
+  const materialIds = Array.isArray(body.materialIds)
+    ? ruleIdList(body.materialIds)
+    : (body.templateMaterialId ? [Number(body.templateMaterialId)].filter((id) => Number.isInteger(id) && id > 0) : []);
+  const templateMaterialId: number | null = materialIds[0] ?? null;
+  if (materialIds.length > 0) {
+    const foundMaterials = await prisma.material.findMany({ where: { id: { in: materialIds }, isArchived: false } });
+    if (foundMaterials.length !== materialIds.length) throw new Error('선택한 재료를 찾을 수 없습니다.');
+  }
+  if (ruleIds.length > 0) {
+    const found = await prisma.rule.findMany({ where: { id: { in: ruleIds } } });
+    if (found.length !== ruleIds.length) throw new Error('선택한 규칙을 찾을 수 없습니다.');
+  }
+  return prisma.rssFeed.update({
+    where: { id },
+    data: {
+      name,
+      url,
+      category: String(body.category || '').trim() || null,
+      templateMaterialId,
+      materials: { set: materialIds.map((materialId) => ({ id: materialId })) },
+      rules: { set: ruleIds.map((ruleId) => ({ id: ruleId })) },
+    },
+    include: feedInclude,
+  });
+}
+
 app.get('/api/rss-feeds', async (req, res) => {
-  const feeds = await prisma.rssFeed.findMany({ orderBy: { createdAt: 'desc' } });
+  const feeds = await prisma.rssFeed.findMany({ orderBy: { createdAt: 'desc' }, include: feedInclude });
   res.json(feeds);
 });
 
 app.post('/api/rss-feeds', async (req, res) => {
-  const { name, url, category } = req.body;
+  const { name, url, category, templateMaterialId, materialIds, ruleIds } = req.body;
   if (!name || !url) return res.status(400).json({ error: "Name and URL are required" });
   try {
     const feed = await prisma.rssFeed.create({ data: { name, url, category } });
-    res.json(feed);
+    const saved = await saveFeedWriting(feed.id, { name, url, category, templateMaterialId, materialIds, ruleIds });
+    res.json(saved);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.put('/api/rss-feeds/:id', async (req, res) => {
+  try {
+    const feed = await prisma.rssFeed.findUnique({ where: { id: Number(req.params.id) } });
+    if (!feed) return res.status(404).json({ error: 'Not found' });
+    const saved = await saveFeedWriting(feed.id, req.body);
+    res.json(saved);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
   }
 });
 
@@ -139,8 +218,13 @@ app.post('/api/inbox/:id/process', async (req, res) => {
     // AI 처리
     const aiResult = await aiService.processInboxItem(inboxItem.content);
 
+    const category = String(aiResult.category || '').trim().toUpperCase();
+    if (category !== 'MATERIAL' && category !== 'RULE') {
+      return res.status(422).json({ error: 'AI 분류 결과를 해석하지 못했습니다.' });
+    }
+
     let createdItem;
-    if (aiResult.category === 'MATERIAL') {
+    if (category === 'MATERIAL') {
       createdItem = await prisma.material.create({
         data: {
           title: aiResult.title,
@@ -162,10 +246,10 @@ app.post('/api/inbox/:id/process', async (req, res) => {
     // Inbox 아이템 처리 완료 마킹
     await prisma.inbox.update({
       where: { id: inboxItem.id },
-      data: { processed: true }
+      data: { processed: true, autoError: null }
     });
 
-    res.json({ success: true, category: aiResult.category, data: createdItem });
+    res.json({ success: true, category, data: createdItem });
   } catch (error: any) {
     console.error(error);
     res.status(500).json({ error: error.message });
@@ -177,10 +261,96 @@ app.delete('/api/inbox/:id', async (req, res) => {
   res.json({ success: true });
 });
 
+app.post('/api/inbox/:id/auto-retry', async (req, res) => {
+  try {
+    const item = await prisma.inbox.findUnique({ where: { id: Number(req.params.id) } });
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    const updated = await prisma.inbox.update({
+      where: { id: item.id },
+      data: { autoError: null },
+    });
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/automation', async (req, res) => {
+  try {
+    res.json(await getAutomationConfig());
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/automation', async (req, res) => {
+  try {
+    const { enabled, batchSize, autoOsmu, templateMaterialId } = req.body;
+    const config = await updateAutomationConfig({ enabled, batchSize, autoOsmu, templateMaterialId });
+    res.json(config);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post('/api/automation/run', async (req, res) => {
+  try {
+    const addedCount = await fetchAllActiveRssFeeds();
+    await prisma.systemLog.create({
+      data: {
+        event: 'MANUAL_RSS',
+        message: addedCount > 0 ? `수동 수집 ${addedCount}건.` : '수동 수집: 새로운 기사 없음.',
+      },
+    });
+    const result = await runAutomationCycle('manual');
+    res.json({ ...result, addedCount });
+  } catch (error: any) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // --- 1 재료 (Material) ---
 app.get('/api/materials', async (req, res) => {
-  const items = await prisma.material.findMany({ where: { isArchived: false }, orderBy: { createdAt: 'desc' } });
+  const items = await prisma.material.findMany({
+    orderBy: { createdAt: 'desc' },
+  });
   res.json(items);
+});
+
+app.put('/api/materials/:id/toggle', async (req, res) => {
+  try {
+    const material = await prisma.material.findUnique({ where: { id: Number(req.params.id) } });
+    if (!material) return res.status(404).json({ error: 'Material not found' });
+    const updated = await prisma.material.update({
+      where: { id: material.id },
+      data: { isActive: !material.isActive },
+    });
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/materials/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const material = await prisma.material.findUnique({ where: { id } });
+    if (!material) return res.status(404).json({ error: 'Material not found' });
+    const content = String(req.body.content || '').trim();
+    if (!content) return res.status(400).json({ error: '내용을 입력해주세요.' });
+    const updated = await prisma.material.update({
+      where: { id },
+      data: {
+        title: String(req.body.title || '').trim() || '기본 글감 구조',
+        content,
+        isArchived: false,
+      },
+    });
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.post('/api/materials/extract', async (req, res) => {
@@ -221,6 +391,29 @@ app.post('/api/rules', async (req, res) => {
   res.json(item);
 });
 
+app.put('/api/rules/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const rule = await prisma.rule.findUnique({ where: { id } });
+    if (!rule) return res.status(404).json({ error: 'Rule not found' });
+    const content = String(req.body.content || '').trim();
+    if (!content) return res.status(400).json({ error: '내용을 입력해주세요.' });
+    const allowedTypes = ['TONE', 'FORMAT', 'PROHIBITED', 'INSIGHT'];
+    const type = allowedTypes.includes(req.body.type) ? req.body.type : rule.type;
+    const updated = await prisma.rule.update({
+      where: { id },
+      data: {
+        title: String(req.body.title || '').trim() || '새 규칙 템플릿',
+        content,
+        type,
+      },
+    });
+    res.json(updated);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.put('/api/rules/:id/toggle', async (req, res) => {
   const rule = await prisma.rule.findUnique({ where: { id: Number(req.params.id) } });
   if (!rule) return res.status(404).json({ error: "Rule not found" });
@@ -243,36 +436,29 @@ app.get('/api/posts', async (req, res) => {
 });
 
 app.delete('/api/posts/:id', async (req, res) => {
-  await prisma.post.delete({ where: { id: Number(req.params.id) } });
-  res.json({ success: true });
+  try {
+    await prisma.post.delete({ where: { id: Number(req.params.id) } });
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // AI 초안 생성 
 app.post('/api/posts/generate', async (req, res) => {
   try {
-    const { keyword, inboxIds, materialIds, ruleIds } = req.body; 
-    
-    // 1. 선택된 수집함 원시 데이터 가져오기
+    const { keyword, inboxIds, materialIds, ruleIds } = req.body;
     const inboxes = await prisma.inbox.findMany({
       where: { id: { in: inboxIds || [] } }
     });
-    
-    // 2. 선택된 재료 템플릿 가져오기
-    const materials = await prisma.material.findMany({
-      where: { id: { in: materialIds || [] } }
-    });
-    
-    // 3. 선택된 규칙 템플릿 가져오기
-    const rules = await prisma.rule.findMany({
-      where: { id: { in: ruleIds || [] } }
-    });
-
+    const plan = await resolveDraftInputs({ keyword, inboxIds, materialIds, ruleIds });
     const inboxContents = inboxes.map(i => i.content);
-    const materialContents = materials.map(m => m.content);
-    const ruleContents = rules.map(r => r.content);
-
-    // 4. AI 초안 직접 생성 (Direct Generate)
-    const draftResult = await aiService.generateDirectDraft(keyword, inboxContents, materialContents, ruleContents);
+    const draftResult = await aiService.generateDirectDraft(
+      plan.keyword,
+      inboxContents,
+      plan.materialContents,
+      plan.ruleContents
+    );
 
     // AI 썸네일 이미지 자동 첨부 (pollinations.ai 활용)
     // 한글 키워드일 수 있으므로 영어로 번역하거나 직관적인 영단어 조합이 좋지만, pollinations는 한글 프롬프트도 어느정도 이해합니다.
@@ -287,7 +473,8 @@ app.post('/api/posts/generate', async (req, res) => {
         content: imageMarkdown + draftResult.content,
         status: 'DRAFT',
         keyword: draftResult.keyword,
-        platform: 'NAVER_BLOG'
+        platform: 'NAVER_BLOG',
+        inboxId: Array.isArray(inboxIds) && inboxIds.length === 1 ? Number(inboxIds[0]) : null
       }
     });
 
@@ -388,6 +575,11 @@ cron.schedule('0 * * * *', async () => {
         message: msg
       }
     });
+
+    const config = await getAutomationConfig();
+    if (config.enabled) {
+      await runAutomationCycle('cron');
+    }
   } catch (error: any) {
     console.error('🤖 [Cron] RSS 수집 중 에러 발생:', error);
     await prisma.systemLog.create({
@@ -401,5 +593,5 @@ cron.schedule('0 * * * *', async () => {
 
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
-  console.log('🤖 [Cron] 스케줄러 봇이 활성화되었습니다 (매시간 정각 실행)');
+  console.log('🤖 [Cron] 스케줄러 봇이 활성화되었습니다 (매시간 정각, 수집 후 자동 작성)');
 });

@@ -14,6 +14,9 @@ model Inbox {
   type      String   @default("TEXT") // TEXT, URL, IMAGE
   createdAt DateTime @default(now())
   processed Boolean  @default(false) // True if moved to Material or Rule
+  autoError String?  // Set when the hourly pipeline skips this item after a failure
+  rssFeedId Int?
+  rssFeed   RssFeed? @relation(fields: [rssFeedId], references: [id], onDelete: SetNull)
 }
 
 // 1 재료 (Material)
@@ -26,6 +29,8 @@ model Material {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   isArchived  Boolean  @default(false) // If moved to 9 보관
+  isActive    Boolean  @default(false) // 발행 대기열 기본 적용
+  feeds       RssFeed[] @relation("FeedMaterials")
 }
 
 // 2 규칙 (Rule)
@@ -37,6 +42,7 @@ model Rule {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   isActive    Boolean  @default(true) // Whether to apply this rule
+  feeds       RssFeed[] @relation("FeedRules")
 }
 
 // 3 발행 & 초안 (Post)
@@ -48,8 +54,9 @@ model Post {
   keyword       String?
   publishedUrl  String?
   platform      String   @default("NAVER_BLOG") // NAVER_BLOG, INSTA, SHORTS, THREADS
+  inboxId       Int?     // Source inbox row, so the pipeline does not draft the same item twice
   parentPostId  Int?     // For OSMU (e.g. this is a short version of a blog post)
-  parent        Post?    @relation("OSMU", fields: [parentPostId], references: [id])
+  parent        Post?    @relation("OSMU", fields: [parentPostId], references: [id], onDelete: Cascade)
   derivatives   Post[]   @relation("OSMU")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -64,11 +71,24 @@ model SystemLog {
 }
 
 // 5 RSS 수집 채널 (RSS Feeds)
+// 6 자동 작성 설정 (한 행)
+model AutomationConfig {
+  id                 Int     @id
+  enabled            Boolean @default(true)
+  batchSize          Int     @default(1)
+  autoOsmu           Boolean @default(false)
+  templateMaterialId Int?
+}
+
 model RssFeed {
-  id        Int      @id @default(autoincrement())
-  name      String
-  url       String
-  category  String?  @default("IT")
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id                 Int      @id @default(autoincrement())
+  name               String
+  url                String
+  category           String?  @default("IT")
+  isActive           Boolean  @default(true)
+  templateMaterialId Int?
+  createdAt          DateTime @default(now())
+  inboxes            Inbox[]
+  rules              Rule[]     @relation("FeedRules")
+  materials          Material[] @relation("FeedMaterials")
 }

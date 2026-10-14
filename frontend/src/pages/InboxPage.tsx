@@ -1,15 +1,26 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { 
-  Send, Bot, Trash2, RotateCcw, Rss, Plus, X, Globe, Check, 
+  Send, Bot, Trash2, RotateCcw, Rss, Plus, X, Globe, 
   ExternalLink, Eye, Copy, BookOpen, Sparkles, Clock, 
   Sun, Moon, FileText, CheckCheck
 } from 'lucide-react';
 
 const API_URL = 'http://localhost:3001/api';
 
+function apiErrorMessage(error: unknown, fallback: string) {
+  const body = (error as { response?: { data?: { error?: string } } })?.response?.data?.error;
+  return body || fallback;
+}
+
+type ChannelDraft = { name: string; url: string; category: string; materialIds: number[]; ruleIds: number[] };
+
+const emptyChannelDraft: ChannelDraft = { name: '', url: '', category: 'IT/테크', materialIds: [], ruleIds: [] };
+
 export function InboxPage() {
   const [items, setItems] = useState<any[]>([]);
+  const [showProcessed, setShowProcessed] = useState(false);
+  const [listError, setListError] = useState('');
   const [logs, setLogs] = useState<any[]>([]);
   const [content, setContent] = useState('');
   const [loadingId, setLoadingId] = useState<number | null>(null);
@@ -20,6 +31,15 @@ export function InboxPage() {
   const [newRssName, setNewRssName] = useState('');
   const [newRssUrl, setNewRssUrl] = useState('');
   const [newRssCategory, setNewRssCategory] = useState('IT/테크');
+  const [newMaterialIds, setNewMaterialIds] = useState<number[]>([]);
+  const [newRuleIds, setNewRuleIds] = useState<number[]>([]);
+  const [libraryMaterials, setLibraryMaterials] = useState<{ id: number; title: string | null }[]>([]);
+  const [libraryRules, setLibraryRules] = useState<{ id: number; title: string }[]>([]);
+  const [feedDrafts, setFeedDrafts] = useState<Record<number, ChannelDraft>>({});
+  const feedDraftsRef = useRef(feedDrafts);
+  const feedSaveSeq = useRef<Record<number, number>>({});
+  feedDraftsRef.current = feedDrafts;
+  const channelCategories = ['IT/테크', '개발/기술', '스타트업/비즈니스', '일반 트렌드'];
 
   // 고급 스마트 리더 뷰어 상태
   const [activeArticle, setActiveArticle] = useState<any | null>(null);
@@ -138,9 +158,16 @@ export function InboxPage() {
   }, []);
 
   const fetchInbox = async () => {
-    const res = await axios.get(`${API_URL}/inbox`);
-    setItems(res.data.filter((item: any) => !item.processed));
+    try {
+      const res = await axios.get(`${API_URL}/inbox`);
+      setItems(res.data);
+      setListError('');
+    } catch (e) {
+      setListError(apiErrorMessage(e, '수집함을 불러오지 못했습니다.'));
+    }
   };
+
+  const visibleItems = items.filter((item) => (showProcessed ? item.processed : !item.processed));
 
   const fetchLogs = async () => {
     try {
@@ -155,10 +182,39 @@ export function InboxPage() {
     try {
       const res = await axios.get(`${API_URL}/rss-feeds`);
       setRssFeeds(res.data);
+      const nextDrafts = Object.fromEntries(res.data.map((feed: { id: number; name?: string; url?: string; category?: string | null; templateMaterialId?: number | null; materials?: { id: number }[]; rules?: { id: number }[] }) => [feed.id, {
+        name: feed.name || '',
+        url: feed.url || '',
+        category: feed.category || 'IT/테크',
+        materialIds: (feed.materials && feed.materials.length > 0)
+          ? feed.materials.map((material) => material.id)
+          : (feed.templateMaterialId ? [feed.templateMaterialId] : []),
+        ruleIds: (feed.rules || []).map((rule) => rule.id),
+      }]));
+      feedDraftsRef.current = nextDrafts;
+      setFeedDrafts(nextDrafts);
     } catch (e) {
       console.error(e);
     }
   };
+
+  const fetchWritingLibrary = async () => {
+    try {
+      const [materialsRes, rulesRes] = await Promise.all([
+        axios.get(`${API_URL}/materials`),
+        axios.get(`${API_URL}/rules`),
+      ]);
+      setLibraryMaterials(materialsRes.data.map((item: { id: number; title: string | null }) => ({ id: item.id, title: item.title })));
+      setLibraryRules(rulesRes.data.map((item: { id: number; title: string }) => ({ id: item.id, title: item.title })));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  useEffect(() => {
+    if (!showRssModal) return;
+    fetchWritingLibrary();
+  }, [showRssModal]);
 
   const handleAddRss = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -167,10 +223,14 @@ export function InboxPage() {
       await axios.post(`${API_URL}/rss-feeds`, {
         name: newRssName.trim(),
         url: newRssUrl.trim(),
-        category: newRssCategory
+        category: newRssCategory,
+        materialIds: newMaterialIds,
+        ruleIds: newRuleIds,
       });
       setNewRssName('');
       setNewRssUrl('');
+      setNewMaterialIds([]);
+      setNewRuleIds([]);
       fetchRssFeeds();
       alert("새 RSS 채널이 등록되었습니다.");
     } catch (e) {
@@ -187,6 +247,85 @@ export function InboxPage() {
     }
   };
 
+  const persistFeedSelection = async (feedId: number, draft: ChannelDraft, notify = false) => {
+    if (!draft.name.trim() || !draft.url.trim()) {
+      alert('채널명과 RSS URL을 입력해주세요.');
+      fetchRssFeeds();
+      return;
+    }
+    const seq = (feedSaveSeq.current[feedId] || 0) + 1;
+    feedSaveSeq.current[feedId] = seq;
+    try {
+      const res = await axios.put(`${API_URL}/rss-feeds/${feedId}`, {
+        name: draft.name.trim(),
+        url: draft.url.trim(),
+        category: draft.category,
+        materialIds: draft.materialIds,
+        ruleIds: draft.ruleIds,
+      });
+      if (feedSaveSeq.current[feedId] !== seq) return;
+      const materialIds = (res.data.materials || []).map((material: { id: number }) => material.id);
+      const ruleIds = (res.data.rules || []).map((rule: { id: number }) => rule.id);
+      setRssFeeds((prev) => prev.map((feed) => feed.id === feedId ? { ...feed, materials: res.data.materials, rules: res.data.rules, templateMaterialId: res.data.templateMaterialId } : feed));
+      const current = feedDraftsRef.current[feedId] || draft;
+      const nextDraft: ChannelDraft = {
+        ...current,
+        materialIds,
+        ruleIds,
+        ...(notify ? {
+          name: res.data.name || current.name,
+          url: res.data.url || current.url,
+          category: res.data.category || current.category,
+        } : {}),
+      };
+      const next = { ...feedDraftsRef.current, [feedId]: nextDraft };
+      feedDraftsRef.current = next;
+      setFeedDrafts(next);
+      if (notify) alert('채널 수정을 저장했습니다.');
+    } catch (e) {
+      if (feedSaveSeq.current[feedId] !== seq) return;
+      alert(apiErrorMessage(e, '채널 설정을 저장하지 못했습니다.'));
+      fetchRssFeeds();
+    }
+  };
+
+  const handleSaveFeedWriting = (id: number) => {
+    const draft = feedDraftsRef.current[id];
+    if (!draft || !draft.name.trim() || !draft.url.trim()) return alert('채널명과 RSS URL을 입력해주세요.');
+    persistFeedSelection(id, draft, true);
+  };
+
+  const changeFeedDraft = (feedId: number, patch: Partial<ChannelDraft>) => {
+    const current = feedDraftsRef.current[feedId] || emptyChannelDraft;
+    const next = { ...feedDraftsRef.current, [feedId]: { ...current, ...patch } };
+    feedDraftsRef.current = next;
+    setFeedDrafts(next);
+  };
+
+  const toggleFeedMaterial = (feedId: number, materialId: number) => {
+    const current = feedDraftsRef.current[feedId] || emptyChannelDraft;
+    const materialIds = current.materialIds.includes(materialId)
+      ? current.materialIds.filter((id) => id !== materialId)
+      : [...current.materialIds, materialId];
+    const nextDraft = { ...current, materialIds };
+    const next = { ...feedDraftsRef.current, [feedId]: nextDraft };
+    feedDraftsRef.current = next;
+    setFeedDrafts(next);
+    persistFeedSelection(feedId, nextDraft);
+  };
+
+  const toggleFeedRule = (feedId: number, ruleId: number) => {
+    const current = feedDraftsRef.current[feedId] || emptyChannelDraft;
+    const ruleIds = current.ruleIds.includes(ruleId)
+      ? current.ruleIds.filter((id) => id !== ruleId)
+      : [...current.ruleIds, ruleId];
+    const nextDraft = { ...current, ruleIds };
+    const next = { ...feedDraftsRef.current, [feedId]: nextDraft };
+    feedDraftsRef.current = next;
+    setFeedDrafts(next);
+    persistFeedSelection(feedId, nextDraft);
+  };
+
   const handleDeleteRss = async (id: number) => {
     if (!confirm("이 RSS 채널을 삭제하시겠습니까?")) return;
     try {
@@ -200,9 +339,13 @@ export function InboxPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim()) return;
-    await axios.post(`${API_URL}/inbox`, { content, type: 'TEXT' });
-    setContent('');
-    fetchInbox();
+    try {
+      await axios.post(`${API_URL}/inbox`, { content, type: 'TEXT' });
+      setContent('');
+      fetchInbox();
+    } catch (e) {
+      alert(apiErrorMessage(e, '저장 중 오류가 발생했습니다.'));
+    }
   };
 
   const handleProcess = async (id: number) => {
@@ -212,15 +355,15 @@ export function InboxPage() {
       const { category, data } = res.data;
       fetchInbox(); // Refresh list after successful processing
 
-      const categoryName = category === 'MATERIAL' ? '1 재료 베이스' : '2 규칙 (프롬프트)';
-      const targetPath = category === 'MATERIAL' ? '/materials' : '/rules';
+      const normalized = String(category || '').toUpperCase();
+      const categoryName = normalized === 'MATERIAL' ? '1 재료 베이스' : '2 규칙 (프롬프트)';
+      const targetPath = normalized === 'MATERIAL' ? '/materials' : '/rules';
 
       if (confirm(`🎉 AI 정제가 완료되었습니다!\n\n• 분류: [${categoryName}]\n• 생성된 제목: "${data.title}"\n• 키워드: ${data.keyword || '없음'}\n\n해당 메뉴(${categoryName})로 바로 이동하여 확인하시겠습니까?`)) {
         window.location.href = targetPath;
       }
     } catch (e) {
-      console.error(e);
-      alert("AI 정제 중 오류가 발생했습니다. 터미널 로그를 확인해주세요.");
+      alert(apiErrorMessage(e, "AI 정제 중 오류가 발생했습니다. 터미널 로그를 확인해주세요."));
     }
     setLoadingId(null);
   };
@@ -232,6 +375,15 @@ export function InboxPage() {
       fetchInbox();
     } catch (e) {
       alert("삭제 중 오류가 발생했습니다.");
+    }
+  };
+
+  const handleRetryAuto = async (id: number) => {
+    try {
+      await axios.post(`${API_URL}/inbox/${id}/auto-retry`);
+      fetchInbox();
+    } catch (e) {
+      alert(apiErrorMessage(e, '다시 시도 표시에 실패했습니다.'));
     }
   };
 
@@ -280,6 +432,7 @@ export function InboxPage() {
             ) : (
               <p className="text-xs text-slate-500 mt-1">아직 기록된 봇 활동이 없습니다.</p>
             )}
+            <p className="text-[11px] text-slate-400 mt-1">글 초안까지 잇는 자동 작성은 대시보드에서 켜고 끕니다.</p>
           </div>
         </div>
         <button onClick={fetchLogs} className="text-xs text-blue-600 hover:text-blue-800 font-medium shrink-0 flex items-center gap-1"><RotateCcw size={12}/> 로그 갱신</button>
@@ -313,20 +466,29 @@ export function InboxPage() {
 
       <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
         <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
-          <h3 className="text-sm font-semibold text-slate-700">대기 중인 수집 항목 ({items.length})</h3>
+          <h3 className="text-sm font-semibold text-slate-700">{showProcessed ? '처리된 수집 항목' : '대기 중인 수집 항목'} ({visibleItems.length})</h3>
+          <button
+            type="button"
+            onClick={() => setShowProcessed((prev) => !prev)}
+            className={`text-xs font-semibold px-2.5 py-1 rounded-md border transition ${showProcessed ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
+          >
+            {showProcessed ? '대기 항목 보기' : '처리됨 보기'}
+          </button>
         </div>
 
         {/* 목록 최상단 구분 컬러 라인 */}
-        {items.length > 0 && (
+        {visibleItems.length > 0 && (
           <div className="h-1.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-sky-400 shadow-xs" />
         )}
 
         <div className="divide-y divide-slate-100">
-          {items.length === 0 ? (
-            <p className="text-slate-500 text-center py-8 text-sm">처리할 아이템이 없습니다.</p>
+          {listError ? (
+            <p className="text-red-600 text-center py-8 text-sm">{listError}</p>
+          ) : visibleItems.length === 0 ? (
+            <p className="text-slate-500 text-center py-8 text-sm">{showProcessed ? '처리된 항목이 없습니다.' : '처리할 아이템이 없습니다.'}</p>
           ) : (
             Object.entries(
-              items.reduce((acc: any, item: any) => {
+              visibleItems.reduce((acc: any, item: any) => {
                 const date = new Date(item.createdAt);
                 const key = date.toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
                 if (!acc[key]) acc[key] = [];
@@ -376,6 +538,9 @@ export function InboxPage() {
                                   <span className="inline-block px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold rounded shadow-2xs">
                                     {parsed.channel}
                                   </span>
+                                  {item.processed && (
+                                    <span className="inline-block px-2 py-0.5 bg-slate-200 text-slate-700 border border-slate-300 text-[10px] font-bold rounded">처리됨</span>
+                                  )}
 
                                   {/* 링크 배지 및 고급 리치 프리뷰 팝오버 */}
                                   {parsed.link && (
@@ -457,25 +622,43 @@ export function InboxPage() {
                                 </p>
                               </div>
                             ) : (
-                              <p 
-                                onClick={() => openArticleReader(item, parsed)}
-                                className="text-slate-800 text-sm whitespace-pre-wrap leading-relaxed cursor-pointer hover:text-blue-600 transition"
-                                title="클릭하여 전체 보기"
-                              >
-                                {item.content}
-                              </p>
+                              <div>
+                                {item.processed && (
+                                  <span className="inline-block mb-1 px-2 py-0.5 bg-slate-200 text-slate-700 border border-slate-300 text-[10px] font-bold rounded">처리됨</span>
+                                )}
+                                <p
+                                  onClick={() => openArticleReader(item, parsed)}
+                                  className="text-slate-800 text-sm whitespace-pre-wrap leading-relaxed cursor-pointer hover:text-blue-600 transition"
+                                  title="클릭하여 전체 보기"
+                                >
+                                  {item.content}
+                                </p>
+                              </div>
+                            )}
+                            {item.autoError && !item.processed && (
+                              <p className="mt-2 text-[11px] leading-relaxed text-red-600">자동 작성 실패: {item.autoError}</p>
                             )}
                           </div>
                         </div>
 
                         <div className="flex items-center gap-2 shrink-0 self-end md:self-center opacity-100 sm:opacity-90 sm:group-hover:opacity-100 transition-opacity">
-                          <button 
-                            onClick={() => handleProcess(item.id)}
-                            disabled={loadingId === item.id}
-                            className="bg-white text-blue-600 border border-blue-200 px-3.5 py-1.5 rounded-md text-xs font-semibold hover:bg-blue-600 hover:text-white hover:border-blue-600 shadow-2xs flex items-center gap-1.5 transition disabled:opacity-50"
-                          >
-                            {loadingId === item.id ? <span className="animate-pulse">처리 중...</span> : <><Bot size={14} /> AI 정제 (재료화)</>}
-                          </button>
+                          {!item.processed && item.autoError && (
+                            <button
+                              onClick={() => handleRetryAuto(item.id)}
+                              className="bg-white text-slate-700 border border-slate-300 px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-slate-50"
+                            >
+                              다시 자동 시도
+                            </button>
+                          )}
+                          {!item.processed && (
+                            <button
+                              onClick={() => handleProcess(item.id)}
+                              disabled={loadingId === item.id}
+                              className="bg-white text-blue-600 border border-blue-200 px-3.5 py-1.5 rounded-md text-xs font-semibold hover:bg-blue-600 hover:text-white hover:border-blue-600 shadow-2xs flex items-center gap-1.5 transition disabled:opacity-50"
+                            >
+                              {loadingId === item.id ? <span className="animate-pulse">처리 중...</span> : <><Bot size={14} /> AI 정제 (재료화)</>}
+                            </button>
+                          )}
                           <button 
                             onClick={() => handleDelete(item.id)}
                             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition"
@@ -499,7 +682,7 @@ export function InboxPage() {
         </div>
 
         {/* 목록 최하단 구분 컬러 라인 */}
-        {items.length > 0 && (
+        {visibleItems.length > 0 && (
           <div className="h-1.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-sky-400 shadow-xs" />
         )}
       </div>
@@ -821,16 +1004,18 @@ export function InboxPage() {
               </span>
 
               <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                <button 
-                  onClick={() => {
-                    const id = activeArticle.id;
-                    setActiveArticle(null);
-                    handleProcess(id);
-                  }}
-                  className="flex-1 sm:flex-initial bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
-                >
-                  <Bot size={14} /> 1 재료함으로 즉시 정제
-                </button>
+                {!activeArticle.processed && (
+                  <button
+                    onClick={() => {
+                      const id = activeArticle.id;
+                      setActiveArticle(null);
+                      handleProcess(id);
+                    }}
+                    className="flex-1 sm:flex-initial bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                  >
+                    <Bot size={14} /> 1 재료함으로 즉시 정제
+                  </button>
+                )}
                 <button 
                   onClick={() => setActiveArticle(null)} 
                   className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 px-4 py-2 rounded-lg text-xs font-semibold transition shadow-2xs cursor-pointer"
@@ -845,8 +1030,14 @@ export function InboxPage() {
 
       {/* RSS 채널 관리 모달 */}
       {showRssModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-150">
+        <div
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onMouseDown={() => setShowRssModal(false)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[85vh] flex flex-col overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-150"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
             <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <Rss size={18} className="text-orange-400" />
@@ -890,6 +1081,42 @@ export function InboxPage() {
                       className="text-xs p-2.5 border border-slate-300 rounded-md bg-white focus:outline-none focus:border-orange-500 col-span-1 sm:col-span-3 font-mono"
                     />
                   </div>
+                  <div className="rounded-md border border-emerald-300 bg-emerald-50 p-2">
+                    <p className="text-[11px] font-semibold text-emerald-700 mb-2">재료 베이스</p>
+                    <div className="flex flex-wrap gap-2">
+                      {libraryMaterials.length === 0 ? (
+                        <p className="text-[11px] text-emerald-700/70">등록된 재료 베이스가 없습니다. 고르지 않으면 기본 글쓰기를 씁니다.</p>
+                      ) : libraryMaterials.map((item) => (
+                        <label key={item.id} className={`text-[11px] px-2 py-1 rounded border cursor-pointer ${newMaterialIds.includes(item.id) ? 'bg-emerald-200 border-emerald-500 text-emerald-950' : 'bg-white border-emerald-200 text-emerald-800'}`}>
+                          <input
+                            type="checkbox"
+                            className="mr-1 accent-emerald-600"
+                            checked={newMaterialIds.includes(item.id)}
+                            onChange={() => setNewMaterialIds((prev) => prev.includes(item.id) ? prev.filter((id) => id !== item.id) : [...prev, item.id])}
+                          />
+                          {item.title || `재료 #${item.id}`}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-orange-300 bg-orange-50 p-2">
+                    <p className="text-[11px] font-semibold text-orange-700 mb-2">규칙</p>
+                    <div className="flex flex-wrap gap-2">
+                      {libraryRules.length === 0 ? (
+                        <p className="text-[11px] text-orange-700/70">등록된 규칙이 없습니다.</p>
+                      ) : libraryRules.map((rule) => (
+                        <label key={rule.id} className={`text-[11px] px-2 py-1 rounded border cursor-pointer ${newRuleIds.includes(rule.id) ? 'bg-orange-200 border-orange-500 text-orange-950' : 'bg-white border-orange-200 text-orange-800'}`}>
+                          <input
+                            type="checkbox"
+                            className="mr-1 accent-orange-600"
+                            checked={newRuleIds.includes(rule.id)}
+                            onChange={() => setNewRuleIds((prev) => prev.includes(rule.id) ? prev.filter((id) => id !== rule.id) : [...prev, rule.id])}
+                          />
+                          {rule.title}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                   <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white py-2 rounded-md text-xs font-bold transition shadow-sm">
                     + RSS 채널 등록하기
                   </button>
@@ -903,35 +1130,106 @@ export function InboxPage() {
                   {rssFeeds.length === 0 ? (
                     <p className="text-xs text-slate-400 py-6 text-center">등록된 RSS 채널이 없습니다.</p>
                   ) : (
-                    rssFeeds.map(feed => (
-                      <div key={feed.id} className="p-3 bg-white border border-slate-200 rounded-lg flex items-center justify-between gap-3 shadow-xs hover:border-slate-300 transition">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium">{feed.category || '기본'}</span>
-                            <h5 className="text-sm font-bold text-slate-900 truncate">{feed.name}</h5>
+                    rssFeeds.map(feed => {
+                      const draft = feedDrafts[feed.id] || { name: feed.name || '', url: feed.url || '', category: feed.category || 'IT/테크', materialIds: [] as number[], ruleIds: [] as number[] };
+                      const categories = draft.category && !channelCategories.includes(draft.category)
+                        ? [draft.category, ...channelCategories]
+                        : channelCategories;
+                      return (
+                      <div key={feed.id} className="p-3 bg-white border border-slate-200 rounded-lg shadow-xs">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <input
+                              type="text"
+                              value={draft.name}
+                              onChange={(e) => changeFeedDraft(feed.id, { name: e.target.value })}
+                              className="text-xs p-2 border border-slate-300 rounded-md bg-slate-50 font-semibold"
+                              aria-label={`${feed.name} 채널명`}
+                            />
+                            <select
+                              value={draft.category}
+                              onChange={(e) => changeFeedDraft(feed.id, { category: e.target.value })}
+                              className="text-xs p-2 border border-slate-300 rounded-md bg-slate-50"
+                              aria-label={`${feed.name} 분류`}
+                            >
+                              {categories.map((category) => (
+                                <option key={category} value={category}>{category}</option>
+                              ))}
+                            </select>
+                            <input
+                              type="text"
+                              value={draft.url}
+                              onChange={(e) => changeFeedDraft(feed.id, { url: e.target.value })}
+                              className="text-xs p-2 border border-slate-300 rounded-md bg-slate-50 font-mono sm:col-span-3"
+                              aria-label={`${feed.name} RSS URL`}
+                            />
                           </div>
-                          <p className="text-xs text-slate-400 font-mono truncate">{feed.url}</p>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleRss(feed.id)}
+                              className={`px-2.5 py-1 rounded text-xs font-bold border transition ${feed.isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-400 border-slate-200'}`}
+                            >
+                              {feed.isActive ? '자동수집 켜짐' : '꺼짐'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteRss(feed.id)}
+                              className="text-slate-300 hover:text-red-500 p-1 rounded transition"
+                              title="채널 삭제"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
                         </div>
-
-                        <div className="flex items-center gap-3 shrink-0">
-                          <button 
-                            type="button" 
-                            onClick={() => handleToggleRss(feed.id)}
-                            className={`px-2.5 py-1 rounded text-xs font-bold border transition ${feed.isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-400 border-slate-200'}`}
+                        <div className="mt-3 space-y-2">
+                          <div className="rounded-md border border-emerald-300 bg-emerald-50 p-2">
+                            <p className="text-[11px] font-semibold text-emerald-700 mb-2">재료 베이스</p>
+                            <div className="flex flex-wrap gap-2">
+                              {libraryMaterials.length === 0 ? (
+                                <p className="text-[11px] text-emerald-700/70">등록된 재료 베이스가 없습니다.</p>
+                              ) : libraryMaterials.map((item) => (
+                                <label key={item.id} className={`text-[11px] px-2 py-1 rounded border cursor-pointer ${draft.materialIds.includes(item.id) ? 'bg-emerald-200 border-emerald-500 text-emerald-950' : 'bg-white border-emerald-200 text-emerald-800'}`}>
+                                  <input
+                                    type="checkbox"
+                                    className="mr-1 accent-emerald-600"
+                                    checked={draft.materialIds.includes(item.id)}
+                                    onChange={() => toggleFeedMaterial(feed.id, item.id)}
+                                  />
+                                  {item.title || `재료 #${item.id}`}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="rounded-md border border-orange-300 bg-orange-50 p-2">
+                            <p className="text-[11px] font-semibold text-orange-700 mb-2">규칙</p>
+                            <div className="flex flex-wrap gap-2">
+                              {libraryRules.length === 0 ? (
+                                <p className="text-[11px] text-orange-700/70">등록된 규칙이 없습니다.</p>
+                              ) : libraryRules.map((rule) => (
+                                <label key={rule.id} className={`text-[11px] px-2 py-1 rounded border cursor-pointer ${draft.ruleIds.includes(rule.id) ? 'bg-orange-200 border-orange-500 text-orange-950' : 'bg-white border-orange-200 text-orange-800'}`}>
+                                  <input
+                                    type="checkbox"
+                                    className="mr-1 accent-orange-600"
+                                    checked={draft.ruleIds.includes(rule.id)}
+                                    onChange={() => toggleFeedRule(feed.id, rule.id)}
+                                  />
+                                  {rule.title}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleSaveFeedWriting(feed.id)}
+                            className="text-xs font-semibold px-3 py-1.5 rounded-md bg-slate-800 text-white"
                           >
-                            {feed.isActive ? '자동수집 켜짐' : '꺼짐'}
-                          </button>
-                          <button 
-                            type="button" 
-                            onClick={() => handleDeleteRss(feed.id)}
-                            className="text-slate-300 hover:text-red-500 p-1 rounded transition" 
-                            title="채널 삭제"
-                          >
-                            <Trash2 size={15} />
+                            수정 저장
                           </button>
                         </div>
                       </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>
