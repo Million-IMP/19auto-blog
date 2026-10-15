@@ -109,15 +109,22 @@ export function remainingTime() {
   return (deadlineStore.getStore() ?? Infinity) - Date.now();
 }
 
-async function askText(prompt: string, maxTokens: number) {
+// cachedPrefix: 여러 단계가 똑같이 보내는 자료 블록. 프롬프트 맨 앞에 두고 캐시해서 다음 단계는 싸게 읽는다.
+async function askText(prompt: string, maxTokens: number, cachedPrefix?: string) {
   const deadline = deadlineStore.getStore() ?? Infinity;
   const remaining = deadline - Date.now();
   if (remaining < 5_000) throw new Error('남은 실행 시간이 부족합니다. 다음 실행에서 이어갑니다.');
+  const content: Anthropic.ContentBlockParam[] = cachedPrefix
+    ? [
+        { type: 'text', text: cachedPrefix, cache_control: { type: 'ephemeral' } },
+        { type: 'text', text: prompt },
+      ]
+    : [{ type: 'text', text: prompt }];
   const response = await anthropic.messages.create(
     {
       model: AI_MODEL,
       max_tokens: maxTokens,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{ role: 'user', content }],
     },
     Number.isFinite(remaining) ? { timeout: remaining - 2_000, maxRetries: 0 } : undefined
   );
@@ -125,6 +132,10 @@ async function askText(prompt: string, maxTokens: number) {
   const text = textBlock?.text || '';
   if (!text) throw new Error('AI 응답이 비어 있습니다.');
   if (response.stop_reason === 'max_tokens') throw new Error(`AI 응답이 길이 제한(${maxTokens} 토큰)에서 잘렸습니다.`);
+  if (cachedPrefix) {
+    const { cache_read_input_tokens: read, cache_creation_input_tokens: written, input_tokens: fresh } = response.usage;
+    console.log(`[AI] 캐시 읽음 ${read ?? 0} · 캐시 저장 ${written ?? 0} · 일반 입력 ${fresh}`);
+  }
   return text;
 }
 
@@ -270,12 +281,10 @@ ${extraContext}
   // 2-1. OUTLINE 단계: 키워드 · 제목 · 독자 질문형 H2 목차 (AEO)
   async generateOutline(input: DraftContext & { keyword: string }) {
     const prompt = `
-당신은 네이버 블로그 기획 에디터입니다. 아래 자료로 쓸 글의 목차만 설계하세요. 본문은 쓰지 않습니다.
+당신은 네이버 블로그 기획 에디터입니다. 위 자료로 쓸 글의 목차만 설계하세요. 본문은 쓰지 않습니다.
 
 [사용자 입력 키워드]
 ${input.keyword || '없음 (자료에서 독자가 실제로 검색할 핵심어를 도출)'}
-
-${contextBlock(input)}
 
 [지침]
 - 핵심어는 독자가 실제로 검색할 말로 하나 정합니다. 검색량·순위는 추정하지 않습니다.
@@ -287,7 +296,7 @@ ${contextBlock(input)}
 {"keyword": "...", "title": "...", "sections": [{"h2": "...", "answer": "...", "needsSource": false}]}
 </outline>
 `;
-    const text = await askText(prompt, 3000);
+    const text = await askText(prompt, 3000, contextBlock(input));
     const outline = parseJsonTag<Outline>(text, 'outline', '목차');
     outline.sections = Array.isArray(outline.sections)
       ? outline.sections.filter((s) => typeof s?.h2 === 'string' && s.h2.trim() && typeof s.answer === 'string')
@@ -302,14 +311,12 @@ ${contextBlock(input)}
   // 2-2. DRAFT 단계: 목차를 따라 본문 작성 (질문 아래 답 먼저, 출처 없는 수치·경험 금지)
   async generateBody(input: DraftContext & { outline: Outline }) {
     const prompt = `
-당신은 네이버 블로그 에디터입니다. 확정된 목차를 따라 본문을 Markdown으로 작성하세요.
+당신은 네이버 블로그 에디터입니다. 위 자료를 바탕으로, 확정된 목차를 따라 본문을 Markdown으로 작성하세요.
 
 [제목] ${input.outline.title}
 [핵심어] ${input.outline.keyword}
 [목차]
 ${input.outline.sections.map((s, i) => `${i + 1}. ## ${s.h2}\n   먼저 답할 내용: ${s.answer}`).join('\n')}
-
-${contextBlock(input)}
 
 [작성 기준]
 - 도입 2~3문장에 핵심어와 글의 결론을 자연스럽게 넣습니다. 핵심어를 억지로 반복하지 않습니다.
@@ -326,7 +333,7 @@ ${contextBlock(input)}
 ...
 </content>
 `;
-    const text = await askText(prompt, 8000);
+    const text = await askText(prompt, 8000, contextBlock(input));
     const match = text.match(/<content>([\s\S]*?)<\/content>/);
     const content = (match ? match[1] : text).trim();
     if (content.length < 200) throw new Error('본문 응답이 너무 짧습니다.');
