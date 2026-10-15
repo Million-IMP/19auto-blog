@@ -212,7 +212,7 @@ ${ruleTemplates.length > 0 ? ruleTemplates.map((r, i) => `${i + 1}. ${r}`).join(
     let rawContent = contentMatch ? contentMatch[1].trim() : resultText;
 
     // 본문 내 [[IMAGE: ...]] 마커를 Pollinations AI 이미지 URL로 자동 치환
-    const processedContent = rawContent.replace(/\[\[IMAGE:\s*([\s\S]*?)\]\]/g, (_, imgDesc) => {
+    const processedContent = rawContent.replace(/\[\[IMAGE:\s*([\s\S]*?)\]\]/g, (_: string, imgDesc: string) => {
       const cleanDesc = encodeURIComponent(imgDesc.trim().replace(/\n/g, ' '));
       return `\n\n![일러스트](https://image.pollinations.ai/prompt/${cleanDesc}?width=800&height=400&nologo=true)\n\n`;
     });
