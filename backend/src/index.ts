@@ -675,7 +675,8 @@ app.get('/api/feedback', async (req, res) => {
 
 app.post('/api/feedback', async (req, res) => {
   const parsed = parseFeedback(req.body || {});
-  if (!parsed.ok) return res.status(400).json({ error: parsed.error });
+  // Vercel 빌드는 strict가 아니라 !parsed.ok 로는 좁혀지지 않는다
+  if ('error' in parsed) return res.status(400).json({ error: parsed.error });
   try {
     res.json(await createFeedback(parsed.data));
   } catch (error: any) {
