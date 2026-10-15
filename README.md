@@ -131,7 +131,19 @@ scripts/                start.js (로컬 실행), prepare-db.js (DB 준비), che
 
 > 2026년 10월 Ideogram `dry_run` 견적 기준. Vercel에서는 한 번 실행에 280초까지라 보통 한 번에 다 만들고, 모자라면 나머지는 이어서 만듭니다.
 
-### 3) 이후 배포
+### 3) 매시간 자동 실행 (GitHub Actions)
+Vercel Hobby 크론은 하루 1회까지라, 초안 1건(6단계)을 끝내는 데 며칠이 걸립니다. `.github/workflows/hourly-cron.yml`이 매시간 7분에 `/api/cron/daily`를 호출해 수집과 단계 진행을 이어갑니다.
+
+```bash
+gh secret set CRON_SECRET          # Vercel의 CRON_SECRET과 같은 값
+gh variable set APP_URL --body "https://<내 프로젝트>.vercel.app"
+gh workflow run hourly-cron.yml    # 바로 한 번 실행해 확인
+```
+
+- GitHub 스케줄은 몇 분씩 늦게 실행될 수 있습니다.
+- 저장소에 60일 동안 커밋이 없으면 GitHub가 예약 실행을 멈춥니다. Actions 탭에서 다시 켜면 됩니다.
+
+### 4) 이후 배포
 GitHub와 연결된 Vercel 프로젝트는 `master`에 푸시하면 자동으로 운영 배포되고, PR마다 미리보기 배포가 만들어집니다.
 
 ---
@@ -145,7 +157,7 @@ GitHub와 연결된 Vercel 프로젝트는 `master`에 푸시하면 자동으로
 | `DATABASE_URL` | 배포 시 ✅ | Postgres 주소. 없으면 로컬 SQLite |
 | `DIRECT_URL` | | 풀링 없는 Postgres 주소 (없으면 `DATABASE_URL`) |
 | `DB_PUSH_ON_BUILD` | | `1`이면 Vercel 빌드 때 DB 구조 반영. 데이터가 지워지는 변경은 Prisma가 거부해 빌드가 멈춥니다 |
-| `CRON_SECRET` | 배포 시 권장 | Vercel 크론 호출 확인 |
+| `CRON_SECRET` | 배포 시 권장 | 크론 호출 확인 (Vercel 크론 · GitHub Actions 공통) |
 | `APP_PASSWORD` | 배포 시 권장 | 설정하면 화면·API에 로그인 필요 (쿠키 30일). 크론은 제외 |
 | `IMAGE_PROVIDER` | | `ideogram` 또는 비움(pollinations) |
 | `IDEOGRAM_API_KEY` | Ideogram 사용 시 | |

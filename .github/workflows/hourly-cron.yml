@@ -1,0 +1,31 @@
+# Vercel Hobby 크론은 하루 1회까지라, 매시간 실행은 GitHub Actions가 대신 호출한다.
+# 한 번 실행은 280초까지 쓰고 남은 단계는 다음 시간에 이어가므로, 초안 1건은 보통 한 번 실행에 READY가 된다 (#8과 함께 병합).
+# 필요한 설정: Secrets → CRON_SECRET (Vercel과 같은 값), Variables → APP_URL (예: https://19auto-blog.vercel.app)
+name: Hourly pipeline
+
+on:
+  schedule:
+    - cron: '7 * * * *' # 정각은 GitHub 대기열이 몰려 지연되므로 7분에 실행
+  workflow_dispatch:
+
+concurrency:
+  group: hourly-pipeline
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Call /api/cron/daily
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "APP_URL 변수 또는 CRON_SECRET 시크릿이 없습니다." >&2
+            exit 1
+          fi
+          curl -fsS --max-time 320 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "${APP_URL%/}/api/cron/daily"
