@@ -107,7 +107,9 @@ async function planImageSet(post: Post): Promise<ImagePlan> {
 
 function imageMarkdown(scene: ImageScene) {
   const alt = `${scene.point.slice(0, 80)} (AI 생성)`.replace(/[[\]]/g, '');
-  return `![${alt}](${scene.url})`;
+  // 이미지 바로 아래 설명글. 이전 계획에는 caption이 없으므로 전달할 뜻(point)으로 대신한다.
+  const caption = (scene.caption || scene.point).replace(/[*_]/g, '').trim();
+  return `![${alt}](${scene.url})\n*▲ ${caption} (AI 생성 이미지)*`;
 }
 
 // 표지는 맨 위, 소제목 이미지는 소제목 아래 첫 문단(먼저 답하는 문장) 다음에 넣는다.
@@ -139,6 +141,8 @@ export async function regenerateImage(postId: number, index: number) {
   const seed = randomSeed();
   const image = await imageProvider().render({
     prompt: scene.prompt,
+    must: scene.must,
+    avoid: scene.avoid,
     style: plan.style,
     width: 800,
     height: index === 0 ? 400 : 450,
@@ -293,7 +297,7 @@ async function runStage(current: Post): Promise<Post> {
         if (remainingTime() < MIN_STAGE_MS) return post;
         const seed = randomSeed();
         const isCover = scene === plan.cover;
-        const image = await provider.render({ prompt: scene.prompt, style: plan.style, width: 800, height: isCover ? 400 : 450, seed });
+        const image = await provider.render({ prompt: scene.prompt, must: scene.must, avoid: scene.avoid, style: plan.style, width: 800, height: isCover ? 400 : 450, seed });
         scene.url = image.url;
         scene.seed = seed;
         plan.provider = image.provider;

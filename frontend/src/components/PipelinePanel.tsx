@@ -22,7 +22,7 @@ type PipelinePost = {
   imagePlan: string | null;
 };
 
-type ImageScene = { h2?: string; point: string; scene: string; must: string; avoid: string; url?: string };
+type ImageScene = { h2?: string; point: string; scene: string; must: string; avoid: string; caption?: string; url?: string };
 type ImagePlan = { style: string; provider?: string; cover: ImageScene; sections: ImageScene[] };
 
 function readPlan(raw: string | null): ImagePlan | null {
@@ -48,6 +48,7 @@ function ImagePlanList({ plan, regenerating, onRegenerate }: { plan: ImagePlan; 
             <p className="font-semibold text-slate-800 truncate">{label}</p>
             <p className="text-slate-600">{scene.scene}</p>
             <p className="text-slate-400">필수: {scene.must} · 제외: {scene.avoid}</p>
+            {scene.caption && <p className="text-slate-500">캡션: ▲ {scene.caption}</p>}
           </div>
           {scene.url && (
             <button

@@ -25,6 +25,7 @@ export type ImageScene = {
   must: string;
   avoid: string;
   prompt: string;
+  caption?: string;
   url?: string;
   seed?: number;
 };
@@ -88,6 +89,14 @@ ${numbered(input.materialTemplates, '자유 형식')}
 [규칙]
 ${numbered(input.ruleTemplates, '제한 없음')}`;
 }
+
+// 장면 계획 공통 규칙. 이미지 품질은 prompt의 구체성에서 나오고, 캡션은 본문에 그대로 실린다.
+const SCENE_RULES = `- prompt는 영어 한 단락으로, 다음 순서로 구체적으로 씁니다: 중심 피사체 1개와 행동 → 구도·카메라(shot type, angle, lens) → 조명 → 색감 → 질감·디테일 → 분위기. 스타일 문장은 prompt에 다시 쓰지 않습니다.
+  예: "a single robotic arm carefully stacking wooden blocks on a workbench, medium shot, slightly low angle, 35mm lens, soft window light from the left, muted teal and warm orange tones, fine surface textures, calm and focused mood, generous negative space on the right"
+- 화면에는 중심 피사체 1개를 두고 블로그 썸네일로 잘려도 되도록 여백을 둡니다. 손·얼굴 클로즈업과 군중 장면은 피합니다(왜곡이 잦음).
+- 이미지 안에 글자·숫자·로고·도표를 넣지 않습니다. 실제 인물이나 상표를 그리지 않습니다.
+- must는 반드시 보여야 할 요소, avoid는 나오면 안 되는 요소를 영어 쉼표 목록으로 씁니다.
+- caption은 이미지 아래에 실리는 한국어 설명 1문장(40자 안팎)입니다. 이미지가 보여주는 것과 그 소제목의 뜻을 잇습니다. 수치나 본문에 없는 사실은 쓰지 않습니다.`;
 
 // 요청 단위 마감 시각. Vercel 함수 제한 안에서 AI 호출이 끝나지 않으면 시간 초과 오류로 멈추고 이어하기로 재개한다.
 const deadlineStore = new AsyncLocalStorage<number>();
@@ -375,16 +384,17 @@ ${input.headings.map((h, i) => `${i + 1}. ${h}`).join('\n')}
 ${input.content.slice(0, 6000)}
 
 [원칙]
-- 한 글에는 스타일 하나만 씁니다. 정해진 스타일이 있으면 그대로 씁니다. style은 영어 한 문장(화풍·색감·조명).
+- 한 글에는 스타일 하나만 씁니다. 정해진 스타일이 있으면 그대로 씁니다.
+- style은 영어 한 문장으로 화풍·색 팔레트·조명·렌더링 품질을 구체적으로 씁니다. 아래 예시는 형식만 참고하고, 화풍과 색은 글의 주제와 톤에 맞게 새로 고릅니다.
+  형식 예:"editorial 3D illustration, soft clay materials, muted teal and warm orange palette, soft volumetric studio lighting, high detail, clean composition"
 - 표지 1장은 글 전체의 의미를, 소제목 이미지는 그 소제목 본문이 설명하는 장면을 보여줍니다. 제목 단어만 보고 고르지 않습니다.
 - 장면끼리 구도와 소재가 겹치지 않게 합니다.
-- 이미지 안에 글자·숫자·로고·도표를 넣지 않습니다. 실제 인물이나 상표를 그리지 않습니다.
-- prompt는 영어로, 장면·필수 요소만 구체적으로 씁니다(스타일 문장은 prompt에 다시 쓰지 않음).
+${SCENE_RULES}
 - sections의 h2는 소제목 목록의 문구를 글자 그대로 씁니다.
 
 아래 형식의 JSON만 <plan> 태그 안에 출력하세요.
 <plan>
-{"style": "...", "cover": {"point": "전달할 뜻(한국어)", "scene": "장면(한국어)", "must": "필수 요소", "avoid": "제외 요소", "prompt": "..."}, "sections": [{"h2": "...", "point": "...", "scene": "...", "must": "...", "avoid": "...", "prompt": "..."}]}
+{"style": "...", "cover": {"point": "전달할 뜻(한국어)", "scene": "장면(한국어)", "must": "필수 요소(영어)", "avoid": "제외 요소(영어)", "prompt": "...", "caption": "..."}, "sections": [{"h2": "...", "point": "...", "scene": "...", "must": "...", "avoid": "...", "prompt": "...", "caption": "..."}]}
 </plan>
 `;
     const text = await askText(prompt, 8000);
@@ -408,12 +418,12 @@ ${input.section.slice(0, 2000)}
 [이미 쓴 장면 prompt]
 ${input.avoidPrompts.map((p) => `- ${p}`).join('\n')}
 
-이미지 안에 글자·숫자·로고를 넣지 않습니다. prompt는 영어.
+${SCENE_RULES}
 <scene>
-{"h2": "${input.h2}", "point": "...", "scene": "...", "must": "...", "avoid": "...", "prompt": "..."}
+{"h2": "${input.h2}", "point": "...", "scene": "...", "must": "...", "avoid": "...", "prompt": "...", "caption": "..."}
 </scene>
 `;
-    return parseJsonTag<ImageScene>(await askText(prompt, 1000), 'scene', '장면 계획');
+    return parseJsonTag<ImageScene>(await askText(prompt, 1500), 'scene', '장면 계획');
   },
 
   // 글감 보드: 수집 항목 하나를 독자 질문·의도·빈틈·다음 행동으로 평가. 검색량·순위는 추정하지 않는다.

@@ -11,7 +11,15 @@ export type ImageRequest = {
   width: number;
   height: number;
   seed: number;
+  must?: string;
+  avoid?: string;
 };
+
+const BASE_NEGATIVE = 'text, letters, words, watermark, logo, signature, blurry, low quality, distorted hands, extra fingers, deformed face';
+
+function fullPrompt(req: ImageRequest) {
+  return [req.style, req.prompt, req.must ? `must include: ${req.must}` : ''].filter(Boolean).join('. ');
+}
 
 export type RenderedImage = { url: string; provider: string };
 
@@ -24,7 +32,7 @@ type ImageProvider = {
 const pollinations: ImageProvider = {
   name: 'pollinations',
   async render(req) {
-    const prompt = encodeURIComponent(`${req.style}. ${req.prompt}. no text, no letters, no logo`);
+    const prompt = encodeURIComponent(`${fullPrompt(req)}. no text, no letters, no logo`);
     return {
       url: `https://image.pollinations.ai/prompt/${prompt}?width=${req.width}&height=${req.height}&seed=${req.seed}&nologo=true`,
       provider: 'pollinations',
@@ -88,8 +96,10 @@ const ideogram: ImageProvider = {
   name: 'ideogram',
   async render(req) {
     const form = new FormData();
-    form.append('prompt', `${req.style}. ${req.prompt}`);
-    form.append('negative_prompt', 'text, letters, words, watermark, logo');
+    form.append('prompt', fullPrompt(req));
+    form.append('negative_prompt', [BASE_NEGATIVE, req.avoid].filter(Boolean).join(', '));
+    // 계획 단계에서 이미 구체적인 prompt를 만들므로, 자동 재작성은 꺼서 한 글 안의 스타일이 흔들리지 않게 한다.
+    form.append('magic_prompt', (process.env.IDEOGRAM_MAGIC_PROMPT || 'off').toLowerCase());
     form.append('aspect_ratio', closestAspectRatio(req.width, req.height));
     form.append('rendering_speed', (process.env.IDEOGRAM_RENDERING_SPEED || 'turbo').toLowerCase());
     form.append('seed', String(req.seed));

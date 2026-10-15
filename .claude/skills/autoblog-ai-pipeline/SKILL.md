@@ -24,6 +24,8 @@ description: AI 초안 생성·자동화 파이프라인. Use when editing promp
   - `IMAGE_PROVIDER`로 고른다. 기본값은 pollinations, `ideogram`은 `IDEOGRAM_API_KEY`가 필요하다.
   - Ideogram 응답 주소는 만료되므로 받은 즉시 저장한다: `BLOB_READ_WRITE_TOKEN`이 있으면 Vercel Blob, 로컬은 `backend/generated-images` → `/api/images/:file`.
   - 설정 확인(과금 없음): `node scripts/check-ideogram.js`
+  - prompt = style + 장면 prompt + must, negative_prompt = 기본 금지어 + avoid. magic_prompt는 기본 off.
+  - 이미지 아래에는 `*▲ caption (AI 생성 이미지)*` 설명글이 붙는다(`imageMarkdown`).
 - `topicService.ts`
   - `evaluateInbox`, `draftFromTopic` (카드 1개당 초안 1개)
 - `publishService.ts`

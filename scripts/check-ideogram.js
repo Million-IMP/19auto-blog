@@ -23,6 +23,7 @@ async function main() {
   form.append('negative_prompt', 'text, letters, words, watermark, logo');
   form.append('aspect_ratio', '16x9');
   form.append('rendering_speed', (process.env.IDEOGRAM_RENDERING_SPEED || 'turbo').toLowerCase());
+  form.append('magic_prompt', (process.env.IDEOGRAM_MAGIC_PROMPT || 'off').toLowerCase());
   form.append('seed', '1234');
   form.append('num_images', '1');
   const res = await fetch('https://api.ideogram.ai/v2/image/generate/ideogram-3?dry_run=true', {
