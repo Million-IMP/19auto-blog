@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Home, Inbox, Archive, BookOpen, FileText, Bot } from 'lucide-react';
+import { Home, Inbox, Archive, BookOpen, FileText, Bot, Lightbulb } from 'lucide-react';
 import { InboxPage } from './pages/InboxPage';
 import { MaterialsPage } from './pages/MaterialsPage';
 import { RulesPage } from './pages/RulesPage';
 import { PostsPage } from './pages/PostsPage';
+import { TopicsPage } from './pages/TopicsPage';
 
 function Sidebar() {
   const location = useLocation();
@@ -32,6 +33,10 @@ function Sidebar() {
         <Link to="/inbox" className={`flex items-center space-x-3 px-3 py-2.5 rounded-lg transition text-sm ${isActive('/inbox')}`}>
           <Inbox size={18} />
           <span>0 수집함</span>
+        </Link>
+        <Link to="/topics" className={`flex items-center space-x-3 px-3 py-2.5 rounded-lg transition text-sm ${isActive('/topics')}`}>
+          <Lightbulb size={18} />
+          <span>글감 보드</span>
         </Link>
         <div className="pt-6 pb-2">
           <p className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">자산 관리</p>
@@ -82,6 +87,7 @@ type AutoConfig = {
   batchSize: number;
   autoOsmu: boolean;
   templateMaterialId: number | null;
+  draftSource: string;
   failedCount: number;
 };
 
@@ -304,6 +310,20 @@ function Dashboard() {
           </label>
         )}
 
+        {auto && (
+          <label className="mt-3 block text-xs font-semibold text-slate-600">
+            초안 대상
+            <select
+              value={auto.draftSource}
+              onChange={(e) => setAuto({ ...auto, draftSource: e.target.value })}
+              className="mt-1 w-full p-2 text-sm border border-slate-300 rounded-md bg-slate-50"
+            >
+              <option value="ALL_RSS">새 RSS 글마다 초안 만들기</option>
+              <option value="SELECTED_TOPICS">새 RSS 글은 글감 보드에서 평가만 하고, 내가 고른 글감만 초안 만들기</option>
+            </select>
+          </label>
+        )}
+
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -340,6 +360,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/inbox" element={<InboxPage />} />
+            <Route path="/topics" element={<TopicsPage />} />
             <Route path="/materials" element={<MaterialsPage />} />
             <Route path="/rules" element={<RulesPage />} />
             <Route path="/posts" element={<PostsPage />} />

@@ -43,7 +43,7 @@ export async function updateBlogProfile(input: ProfileInput) {
   return prisma.blogProfile.upsert({ where: { id: 1 }, update: data, create: { id: 1, ...data } });
 }
 
-async function profileText() {
+export async function profileText() {
   const profile = await getBlogProfile();
   return (Object.keys(PROFILE_FIELDS) as (keyof typeof PROFILE_FIELDS)[])
     .filter((key) => profile[key])

@@ -46,6 +46,20 @@ function parseJsonTag<T>(text: string, tag: string, label: string): T {
   }
 }
 
+export type TopicEvaluation = {
+  keyword: string;
+  topic?: string;
+  question?: string;
+  intent?: string;
+  journey?: string;
+  why?: string;
+  gap?: string;
+  myValue?: string;
+  nextStep?: string;
+  relatedPostId?: number | null;
+  hypotheses?: string[];
+};
+
 export type DraftContext = {
   materials: string;
   sources: string;
@@ -396,6 +410,40 @@ ${input.avoidPrompts.map((p) => `- ${p}`).join('\n')}
 </scene>
 `;
     return parseJsonTag<ImageScene>(await askText(prompt, 1000), 'scene', '장면 계획');
+  },
+
+  // 글감 보드: 수집 항목 하나를 독자 질문·의도·빈틈·다음 행동으로 평가. 검색량·순위는 추정하지 않는다.
+  async evaluateTopic(input: { content: string; existingPosts: { id: number; title: string; keyword: string | null }[]; profile: string }) {
+    const prompt = `
+당신은 검색 콘텐츠 기획자입니다. 아래 수집 항목이 내 블로그 글감으로 쓸 만한지 평가하세요.
+
+[블로그 프로필]
+${input.profile || '없음'}
+
+[수집 항목]
+${input.content.slice(0, 4000)}
+
+[내 기존 글 (id · 제목 · 핵심어)]
+${input.existingPosts.length > 0 ? input.existingPosts.map((p) => `${p.id} · ${p.title} · ${p.keyword || '-'}`).join('\n') : '없음'}
+
+[평가 기준]
+- question: 이 주제를 검색하는 독자가 실제로 묻는 질문 한 문장
+- intent: 검색 의도 (정보 확인 / 방법 / 비교·선택 / 구매·행동 중 하나)
+- journey: 독자 여정 단계 (문제인식 / 탐색 / 비교 / 행동 중 하나)
+- why: 이 독자에게 왜 중요한지 (수집 항목에 근거해서)
+- gap: 수집 항목만으로는 답이 부족한 부분
+- myValue: 블로그 프로필 기준으로 내가 더할 수 있는 것. 근거가 없으면 "확인 필요"
+- nextStep: NEW_POST(새 글) / IMPROVE(내 기존 글 보강) / RESEARCH(자료 추가 조사 먼저)
+- relatedPostId: 주제가 겹치는 내 기존 글 id. 없으면 null. 겹치면 nextStep은 보통 IMPROVE
+- hypotheses: 위 판단 중 수집 항목에 직접 나오지 않고 추정한 내용 (각 한 문장)
+- 검색량·경쟁도·순위·클릭률은 쓰지 않습니다. 모르는 값을 지어내지 않습니다.
+
+아래 형식의 JSON만 <topic> 태그 안에 출력하세요.
+<topic>
+{"keyword": "...", "topic": "주제 묶음", "question": "...", "intent": "...", "journey": "...", "why": "...", "gap": "...", "myValue": "...", "nextStep": "NEW_POST", "relatedPostId": null, "hypotheses": ["..."]}
+</topic>
+`;
+    return parseJsonTag<TopicEvaluation>(await askText(prompt, 2000), 'topic', '글감 평가');
   },
 
   // 3. 기존 블로그 글을 바탕으로 OSMU (인스타, 숏츠, 스레드 등) 콘텐츠 변환

@@ -4,6 +4,7 @@ import { aiService } from './services/aiService';
 import { scrapeArticle } from './services/scraperService';
 import { getAutomationConfig, runAutomationCycle, updateAutomationConfig } from './services/automationService';
 import { resolveDraftInputs } from './services/writingPlan';
+import { draftFromTopic, evaluateInbox, TOPIC_STATUSES, updateTopic } from './services/topicService';
 import { advancePost, createPipelinePost, getBlogProfile, regenerateImage, requestDeadline, resumePost, updateBlogProfile } from './services/draftPipeline';
 import { prisma } from './db';
 import Parser from 'rss-parser';
@@ -293,8 +294,8 @@ app.get('/api/automation', async (req, res) => {
 
 app.put('/api/automation', async (req, res) => {
   try {
-    const { enabled, batchSize, autoOsmu, templateMaterialId } = req.body;
-    const config = await updateAutomationConfig({ enabled, batchSize, autoOsmu, templateMaterialId });
+    const { enabled, batchSize, autoOsmu, templateMaterialId, draftSource } = req.body;
+    const config = await updateAutomationConfig({ enabled, batchSize, autoOsmu, templateMaterialId, draftSource });
     res.json(config);
   } catch (error: any) {
     res.status(400).json({ error: error.message });
@@ -315,6 +316,47 @@ app.post('/api/automation/run', async (req, res) => {
     res.json({ ...result, addedCount });
   } catch (error: any) {
     console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- 글감 보드 (Topic Cards) ---
+app.get('/api/topics', async (req, res) => {
+  try {
+    const status = String(req.query.status || '');
+    const cards = await prisma.topicCard.findMany({
+      where: TOPIC_STATUSES.includes(status) ? { status } : {},
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+    res.json(cards);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 수집 항목을 글감 카드로 평가 (한 번에 최대 5건, AI 호출 1건씩)
+app.post('/api/topics/evaluate', async (req, res) => {
+  try {
+    res.json(await evaluateInbox(Array.isArray(req.body?.inboxIds) ? req.body.inboxIds : []));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/topics/:id', async (req, res) => {
+  try {
+    res.json(await updateTopic(Number(req.params.id), req.body || {}));
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post('/api/topics/:id/draft', async (req, res) => {
+  const deadline = requestDeadline();
+  try {
+    res.json(await draftFromTopic(Number(req.params.id), deadline));
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });

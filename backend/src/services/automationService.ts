@@ -3,6 +3,9 @@ import { prisma } from '../db';
 import type { Post } from '@prisma/client';
 import { resolveDraftInputs } from './writingPlan';
 import { advancePost, createPipelinePost, requestDeadline, unlockedWhere } from './draftPipeline';
+import { draftFromTopic, evaluateInbox } from './topicService';
+
+const DRAFT_SOURCES = ['ALL_RSS', 'SELECTED_TOPICS'];
 
 const OSMU_PLATFORMS = ['INSTA', 'SHORTS', 'THREADS'] as const;
 
@@ -22,6 +25,7 @@ async function presentConfig(row: {
   batchSize: number;
   autoOsmu: boolean;
   templateMaterialId: number | null;
+  draftSource: string;
 }) {
   const [inboxFailed, stageFailed] = await Promise.all([
     prisma.inbox.count({ where: { processed: false, autoError: { not: null } } }),
@@ -33,6 +37,7 @@ async function presentConfig(row: {
     batchSize: row.batchSize,
     autoOsmu: row.autoOsmu,
     templateMaterialId: row.templateMaterialId,
+    draftSource: row.draftSource,
     failedCount,
   };
 }
@@ -51,7 +56,9 @@ export async function updateAutomationConfig(input: {
   batchSize?: number;
   autoOsmu?: boolean;
   templateMaterialId?: number | null;
+  draftSource?: string;
 }) {
+  const draftSource = DRAFT_SOURCES.includes(String(input.draftSource)) ? String(input.draftSource) : 'ALL_RSS';
   const batchSize = Math.min(3, Math.max(1, Number(input.batchSize) || 1));
   let templateMaterialId: number | null = input.templateMaterialId ? Number(input.templateMaterialId) : null;
   if (templateMaterialId) {
@@ -69,6 +76,7 @@ export async function updateAutomationConfig(input: {
       batchSize,
       autoOsmu: Boolean(input.autoOsmu),
       templateMaterialId,
+      draftSource,
     },
     create: {
       id: 1,
@@ -76,6 +84,7 @@ export async function updateAutomationConfig(input: {
       batchSize,
       autoOsmu: Boolean(input.autoOsmu),
       templateMaterialId,
+      draftSource,
     },
   });
   return presentConfig(row);
@@ -132,6 +141,7 @@ export async function runAutomationCycle(trigger: 'cron' | 'manual', deadline = 
   const messages: string[] = [];
   let drafted = 0;
   let classified = 0;
+  let evaluated = 0;
   let osmu = 0;
   let failed = 0;
 
@@ -173,7 +183,14 @@ export async function runAutomationCycle(trigger: 'cron' | 'manual', deadline = 
     for (const item of items) {
       if (Date.now() >= deadline) break;
       try {
-        if (isRssItem(item.content)) {
+        if (isRssItem(item.content) && config.draftSource === 'SELECTED_TOPICS') {
+          const { cards, errors } = await evaluateInbox([item.id]);
+          if (errors.length > 0) throw new Error(errors[0]);
+          await prisma.inbox.update({ where: { id: item.id }, data: { processed: true, autoError: null } });
+          evaluated += 1;
+          messages.push(`글감 평가 "${cards[0].keyword}"`);
+          continue;
+        } else if (isRssItem(item.content)) {
           const existing = await prisma.post.findFirst({
             where: { inboxId: item.id, parentPostId: null },
           });
@@ -249,6 +266,27 @@ export async function runAutomationCycle(trigger: 'cron' | 'manual', deadline = 
       }
     }
 
+    // 2-1) 글감 보드에서 선택했지만 아직 초안이 없는 카드
+    if (config.draftSource === 'SELECTED_TOPICS' && Date.now() < deadline) {
+      const selected = await prisma.topicCard.findMany({
+        where: { status: 'SELECTED', postId: null },
+        orderBy: { createdAt: 'asc' },
+        take: config.batchSize,
+      });
+      for (const card of selected) {
+        if (Date.now() >= deadline) break;
+        try {
+          const post = await draftFromTopic(card.id, deadline);
+          if (post.stage === 'READY') drafted += 1;
+          if (post.stageError) failed += 1;
+          messages.push(describeProgress(post));
+        } catch (err: any) {
+          failed += 1;
+          messages.push(`글감 #${card.id} 초안 실패: ${String(err?.message || err).slice(0, 200)}`);
+        }
+      }
+    }
+
     // 3) 완성된 파이프라인 초안 중 아직 채널 변환이 없는 글에 OSMU 생성
     if (config.autoOsmu && Date.now() < deadline) {
       const readyWithoutOsmu = await prisma.post.findMany({
@@ -264,7 +302,7 @@ export async function runAutomationCycle(trigger: 'cron' | 'manual', deadline = 
       }
     }
 
-    const summary = `자동 작성(${trigger}): 초안 ${drafted}, 분류 ${classified}, OSMU ${osmu}, 실패 ${failed}. ${messages.join(' ')}`;
+    const summary = `자동 작성(${trigger}): 초안 ${drafted}, 분류 ${classified}, 글감 평가 ${evaluated}, OSMU ${osmu}, 실패 ${failed}. ${messages.join(' ')}`;
     await prisma.systemLog.create({
       data: {
         event: trigger === 'cron' ? 'CRON_AUTO_PIPELINE' : 'MANUAL_AUTO_PIPELINE',
