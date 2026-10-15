@@ -63,6 +63,9 @@ if (usePostgres) {
 }
 
 run(['generate', '--schema', schema]);
-if (process.argv.includes('--push') && !process.env.VERCEL) {
+// 로컬은 --push로, Vercel 빌드는 DB_PUSH_ON_BUILD=1일 때만 구조를 반영한다(새로 배포하는 사람용).
+// 데이터가 지워지는 변경이면 prisma가 거부하므로 빌드가 실패하고 배포는 막힌다.
+const pushOnVercel = process.env.VERCEL && process.env.DB_PUSH_ON_BUILD === '1';
+if ((process.argv.includes('--push') && !process.env.VERCEL) || pushOnVercel) {
   run(['db', 'push', '--schema', schema, '--skip-generate']);
 }
