@@ -313,9 +313,10 @@ async function runStage(current: Post): Promise<Post> {
   }
 }
 
-// 요청 시작 시각 기준 마감. Vercel 함수 제한(60초) 안에서 끝내고, 남은 단계는 다음 실행이 이어간다.
+// 요청 시작 시각 기준 마감. Vercel 함수 제한(vercel.json maxDuration 300초) 안에서 끝내고, 남은 단계는 다음 실행이 이어간다.
+// 60초 제한일 때는 DRAFT가 20초 남짓한 시간에 시작해 Request timed out이 났다.
 export function requestDeadline() {
-  return process.env.VERCEL ? Date.now() + 50_000 : Infinity;
+  return process.env.VERCEL ? Date.now() + 280_000 : Infinity;
 }
 
 // 남은 시간이 이보다 적으면 새 단계를 시작하지 않는다.

@@ -15,10 +15,10 @@
   ],
   "functions": {
     "api/server.ts": {
-      "maxDuration": 60
+      "maxDuration": 300
     },
     "api/cron/daily.ts": {
-      "maxDuration": 60
+      "maxDuration": 300
     }
   },
   "crons": [
