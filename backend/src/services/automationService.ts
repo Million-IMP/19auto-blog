@@ -302,11 +302,12 @@ export async function runAutomationCycle(trigger: 'cron' | 'manual', deadline = 
       }
     }
 
-    const summary = `자동 작성(${trigger}): 초안 ${drafted}, 분류 ${classified}, 글감 평가 ${evaluated}, OSMU ${osmu}, 실패 ${failed}. ${messages.join(' ')}`;
+    // 첫 줄은 요약, 이후 줄마다 처리한 항목 하나. 활동 기록 화면에서 줄바꿈 그대로 보여준다.
+    const summary = [`자동 작성(${trigger}): 초안 ${drafted}, 분류 ${classified}, 글감 평가 ${evaluated}, OSMU ${osmu}, 실패 ${failed}`, ...messages.map((m) => `- ${m}`)].join('\n');
     await prisma.systemLog.create({
       data: {
         event: trigger === 'cron' ? 'CRON_AUTO_PIPELINE' : 'MANUAL_AUTO_PIPELINE',
-        message: summary.slice(0, 500),
+        message: summary.slice(0, 2000),
       },
     });
 

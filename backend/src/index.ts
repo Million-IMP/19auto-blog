@@ -659,12 +659,32 @@ app.post('/api/posts/:id/osmu', async (req, res) => {
 });
 
 // --- 4 시스템 로그 (Logs) ---
+// 봇 활동 기록. before(id) 커서로 이어서 불러오고, kind로 종류를 거른다.
+// 예전 기록에는 채널별 이벤트(CRON_RSS_TECHCRUNCH 등)도 있어 접두어로 묶는다.
+const LOG_KINDS: Record<string, object> = {
+  auto: { OR: [{ event: { startsWith: 'CRON_RSS' } }, { event: 'CRON_AUTO_PIPELINE' }] },
+  manual: { event: { startsWith: 'MANUAL_' } },
+  post: { event: { startsWith: 'POST_' } },
+  error: { event: { in: ['CRON_ERROR', 'POST_STAGE_ERROR'] } },
+};
+
 app.get('/api/system-logs', async (req, res) => {
-  const logs = await prisma.systemLog.findMany({ 
-    orderBy: { createdAt: 'desc' },
-    take: 10 
-  });
-  res.json(logs);
+  try {
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
+    const before = Number(req.query.before) || 0;
+    const kindWhere = LOG_KINDS[String(req.query.kind || '')];
+    const logs = await prisma.systemLog.findMany({
+      where: {
+        ...(before ? { id: { lt: before } } : {}),
+        ...(kindWhere || {}),
+      },
+      orderBy: { id: 'desc' },
+      take: limit,
+    });
+    res.json(logs);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 export async function runHourlyPipeline(deadline = requestDeadline()) {

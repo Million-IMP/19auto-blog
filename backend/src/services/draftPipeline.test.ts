@@ -3,6 +3,7 @@ import type { Post } from '@prisma/client';
 
 // DB는 메모리 안의 글 목록으로 대신한다. draftPipeline이 쓰는 호출만 흉내 낸다.
 const posts = new Map<number, Post>();
+const logs: { event: string; message: string }[] = [];
 
 function matches(post: Post, where: any): boolean {
   if (where.id !== undefined && post.id !== where.id) return false;
@@ -28,6 +29,12 @@ vi.mock('../db', () => ({
         if (!post || !matches(post, where)) return { count: 0 };
         posts.set(where.id, { ...post, ...data });
         return { count: 1 };
+      },
+    },
+    systemLog: {
+      create: async ({ data }: any) => {
+        logs.push(data);
+        return data;
       },
     },
     blogProfile: {
@@ -77,6 +84,7 @@ function seedPost(overrides: Partial<Post> = {}): Post {
 
 beforeEach(() => {
   posts.clear();
+  logs.length = 0;
   vi.restoreAllMocks();
   vi.spyOn(aiService, 'generateOutline').mockResolvedValue({
     keyword: '실내 식물',
@@ -105,6 +113,9 @@ describe('advancePost', () => {
     expect(post.title).toBe('실내 식물 물주기');
     expect(post.content.match(/!\[/g)).toHaveLength(3); // 표지 + 소제목 2개
     expect(posts.get(1)!.lockedUntil).toBeNull(); // 끝나면 잠금 해제
+    expect(logs).toHaveLength(1);
+    expect(logs[0].event).toBe('POST_READY');
+    expect(logs[0].message).toContain('SOURCES부터');
   });
 
   it('남은 시간이 단계 최소 시간보다 적으면 새 단계를 시작하지 않는다', async () => {
@@ -113,6 +124,7 @@ describe('advancePost', () => {
 
     expect(post.stage).toBe('SOURCES');
     expect(aiService.generateOutline).not.toHaveBeenCalled();
+    expect(logs).toHaveLength(0); // 아무 단계도 안 했으면 기록하지 않음
   });
 
   it('단계가 실패하면 오류를 남기고 멈추며, 이어하기는 그 단계부터 다시 한다', async () => {
@@ -123,6 +135,8 @@ describe('advancePost', () => {
     expect(failed.stage).toBe('DRAFT');
     expect(failed.stageError).toBe('[DRAFT] 일시 오류');
     expect(aiService.polishBody).not.toHaveBeenCalled();
+    expect(logs.map((l) => l.event)).toEqual(['POST_STAGE_ERROR']);
+    expect(logs[0].message).toContain('[DRAFT] 일시 오류');
 
     // 오류가 남아 있으면 크론(advancePost)은 건너뛴다
     const skipped = await advancePost(1, Infinity);
@@ -131,6 +145,8 @@ describe('advancePost', () => {
     const resumed = await resumePost(1, Infinity);
     expect(resumed.stage).toBe('READY');
     expect(resumed.stageError).toBeNull();
+    expect(logs.map((l) => l.event)).toEqual(['POST_STAGE_ERROR', 'POST_READY']);
+    expect(logs[1].message).toContain('DRAFT부터');
     expect(aiService.generateOutline).toHaveBeenCalledTimes(1); // 앞 단계는 다시 하지 않음
   });
 

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { Link } from 'react-router-dom';
 import { Send, Bot, Trash2, RotateCcw, Rss, Globe, Eye, Sparkles, Clock, Lightbulb } from 'lucide-react';
 import { ArticleReader, type ReaderArticle } from '../components/inbox/ArticleReader';
 import { RssChannelModal } from '../components/inbox/RssChannelModal';
@@ -158,7 +159,7 @@ export function InboxPage() {
             <h3 className="text-sm font-semibold text-slate-800">자동 수집 봇 상태</h3>
             {logs.length > 0 ? (
               <p className="text-xs text-slate-500 mt-1">
-                마지막 실행: {new Date(logs[0].createdAt).toLocaleString()} <span className="mx-2 text-slate-300">|</span> <span className="font-medium text-slate-700">{logs[0].message}</span>
+                마지막 실행: {new Date(logs[0].createdAt).toLocaleString()} <span className="mx-2 text-slate-300">|</span> <span className="font-medium text-slate-700">{logs[0].message.split('\n')[0]}</span>
               </p>
             ) : (
               <p className="text-xs text-slate-500 mt-1">아직 기록된 봇 활동이 없습니다.</p>
@@ -166,7 +167,10 @@ export function InboxPage() {
             <p className="text-[11px] text-slate-400 mt-1">글 초안까지 잇는 자동 작성은 대시보드에서 켜고 끕니다.</p>
           </div>
         </div>
-        <button onClick={fetchLogs} className="text-xs text-blue-600 hover:text-blue-800 font-medium shrink-0 flex items-center gap-1"><RotateCcw size={12}/> 로그 갱신</button>
+        <div className="flex items-center gap-3 shrink-0">
+          <button onClick={fetchLogs} className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"><RotateCcw size={12}/> 로그 갱신</button>
+          <Link to="/activity" className="text-xs text-slate-600 hover:text-slate-900 font-medium">전체 기록 보기 →</Link>
+        </div>
       </div>
       
       <div className="bg-white border border-slate-200 rounded-lg p-4 mb-6 shadow-sm">
