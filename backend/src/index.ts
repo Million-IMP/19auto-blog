@@ -8,6 +8,7 @@ import { resolveDraftInputs } from './services/writingPlan';
 import { markPublished, verifyPublished } from './services/publishService';
 import { draftFromTopic, evaluateInbox, TOPIC_STATUSES, updateTopic } from './services/topicService';
 import { advancePost, createPipelinePost, getBlogProfile, regenerateImage, requestDeadline, resumePost, updateBlogProfile } from './services/draftPipeline';
+import { createFeedback, listFeedback, parseFeedback } from './services/feedbackService';
 import { prisma } from './db';
 import { authStatus, login, logout, requireAuth } from './auth';
 import Parser from 'rss-parser';
@@ -660,6 +661,25 @@ app.post('/api/posts/:id/osmu', async (req, res) => {
   } catch (error: any) {
     console.error(error);
     res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
+// --- 8 사용후기 (Feedback) ---
+app.get('/api/feedback', async (req, res) => {
+  try {
+    res.json(await listFeedback());
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/feedback', async (req, res) => {
+  const parsed = parseFeedback(req.body || {});
+  if (!parsed.ok) return res.status(400).json({ error: parsed.error });
+  try {
+    res.json(await createFeedback(parsed.data));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 
