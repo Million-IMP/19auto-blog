@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { aiService, withDeadline } from './services/aiService';
+import { aiService, normalizeBenchmarkUrls, withDeadline } from './services/aiService';
 import { LOCAL_IMAGE_DIR } from './services/imageProvider';
 import { scrapeArticle } from './services/scraperService';
 import { getAutomationConfig, runAutomationCycle, updateAutomationConfig } from './services/automationService';
@@ -415,9 +415,14 @@ app.put('/api/materials/:id', async (req, res) => {
 
 app.post('/api/materials/extract', async (req, res) => {
   try {
-    const { url } = req.body;
-    if (!url) return res.status(400).json({ error: "URL is required" });
-    const result = await aiService.extractMaterialStructure(url);
+    let urls: string[];
+    try {
+      urls = normalizeBenchmarkUrls(req.body.urls ?? req.body.url);
+    } catch (e: any) {
+      return res.status(400).json({ error: e.message });
+    }
+    if (urls.length === 0) return res.status(400).json({ error: "http(s)로 시작하는 URL을 입력해주세요." });
+    const result = await aiService.extractMaterialStructure(urls);
     res.json(result);
   } catch (error: any) {
     console.error("Extract Material Error:", error);

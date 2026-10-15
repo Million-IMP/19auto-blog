@@ -165,21 +165,37 @@ export async function extractUrlText(url: string): Promise<string> {
   }
 }
 
+export const MAX_BENCHMARK_URLS = 5;
+
+// 벤치마킹 URL 입력(배열 또는 줄바꿈 문자열)을 정리한다. http(s)만 남기고 중복 제거, 최대 개수 초과는 오류.
+export function normalizeBenchmarkUrls(input: unknown): string[] {
+  const raw = Array.isArray(input) ? input.map(String) : String(input ?? '').split(/\s+/);
+  const urls = [...new Set(raw.map((u) => u.trim()).filter((u) => /^https?:\/\/\S+$/i.test(u)))];
+  if (urls.length > MAX_BENCHMARK_URLS) {
+    throw new Error(`URL은 최대 ${MAX_BENCHMARK_URLS}개까지 비교할 수 있습니다.`);
+  }
+  return urls;
+}
+
 export const aiService = {
-  // 특정 글의 구조를 추출하여 재료 템플릿으로 변환
-  async extractMaterialStructure(url: string) {
-    const extractedText = await extractUrlText(url);
-    
-    if (extractedText.includes("가져오는 데 실패했습니다")) {
+  // 글 1개 또는 여러 개의 구조를 분석하여 재료 템플릿으로 변환. 여러 개면 공통 패턴·차별화 기회까지 종합한다.
+  async extractMaterialStructure(urls: string[]) {
+    const texts = await Promise.all(urls.map((url) => extractUrlText(url)));
+    const pages = urls
+      .map((url, i) => ({ url, text: texts[i] }))
+      .filter((page) => !page.text.includes('가져오는 데 실패했습니다'));
+    const failed = urls.filter((url) => !pages.some((page) => page.url === url));
+
+    if (pages.length === 0) {
       throw new Error("웹페이지 구조를 읽어오지 못했습니다. 크롤링 방어가 설정된 페이지일 수 있습니다.");
     }
 
-    const prompt = `
+    const prompt = pages.length === 1 ? `
 당신은 최고의 블로그 컨설턴트이자 구조 분석가입니다.
 다음은 벤치마킹할 블로그 포스트의 텍스트 원본입니다. 이 글의 '특정 내용'을 복사하는 것이 아니라, 이 글이 어떻게 쓰였는지 '구조와 뼈대(목차 흐름, 논리 전개)'를 추출해주세요.
 
 [블로그 포스트 원본]
-${extractedText}
+${pages[0].text}
 
 [출력 지침]
 1. 이 글의 전개 구조를 1, 2, 3 단계로 목차화하여 요약해주세요. (예: 1. 시선을 끄는 도입부(질문형) -> 2. 장점 3가지 나열 -> 3. 아쉬운 점과 극복 팁 -> 4. 독자에게 질문을 던지는 마무리)
@@ -188,16 +204,29 @@ ${extractedText}
 
 <title>이 구조를 부르기 좋은 직관적인 템플릿 제목 (예: IT 제품 실사용 리뷰 구조)</title>
 <content>추출한 구조와 뼈대 (Markdown 리스트 포맷)</content>
+` : `
+당신은 최고의 블로그 컨설턴트이자 구조 분석가입니다.
+다음은 벤치마킹할 블로그 포스트 ${pages.length}개의 텍스트 원본입니다. 각 글의 '특정 내용'을 복사하는 것이 아니라, 글들이 어떻게 쓰였는지 '구조와 뼈대(목차 흐름, 논리 전개)'를 비교 분석해서 이 글들보다 나은 글을 쓰기 위한 템플릿 1개로 종합해주세요.
+
+${pages.map((page, i) => `[글 ${i + 1}]\n${page.text}`).join('\n\n')}
+
+[출력 지침]
+1. 여러 글이 공통으로 쓰는 전개 흐름은 독자가 기대하는 검증된 구조로 보고 뼈대에 반영합니다.
+2. 일부 글에만 있는 좋은 장치(도입 방식, 비교표, 사례, 체크리스트 등)는 효과가 있으면 뼈대에 채택합니다.
+3. 어느 글도 다루지 않았거나 약하게 다룬 부분은 차별화 기회로 짚고, 필요하면 뼈대에 단계로 넣습니다.
+4. content는 아래 세 섹션을 Markdown으로 씁니다.
+   ## 추천 구조 — 1, 2, 3 단계 목차와 단계별 작성 포인트 1~2줄
+   ## 공통 패턴 — 여러 글이 공통으로 쓴 구조와 그 이유 (몇 개 글에서 보였는지 표시, 예: 3/${pages.length})
+   ## 차별화 기회 — 기존 글들의 빈틈·약점과 이를 채우는 방법
+5. 글별 요약은 따로 쓰지 말고, content 전체를 2500자 안팎으로 간결하게 씁니다.
+6. 반드시 아래 XML 태그를 사용하여 출력하세요.
+
+<title>이 구조를 부르기 좋은 직관적인 템플릿 제목 (예: IT 제품 실사용 리뷰 구조)</title>
+<content>종합한 구조와 인사이트 (Markdown)</content>
 `;
 
-    const response = await anthropic.messages.create({
-      model: AI_MODEL,
-      max_tokens: 2000,
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    const textBlock = response.content.find((block: any) => block.type === 'text') as any;
-    const resultText = textBlock?.text || '';
+    // 여러 글 비교는 섹션이 셋이라 한국어 출력이 길다. 3000 토큰에서 잘리는 것을 확인함.
+    const resultText = await askText(prompt, pages.length === 1 ? 3000 : 6000);
 
     const titleMatch = resultText.match(/<title>([\s\S]*?)<\/title>/);
     const contentMatch = resultText.match(/<content>([\s\S]*?)<\/content>/);
@@ -208,7 +237,9 @@ ${extractedText}
 
     return {
       title: titleMatch[1].trim(),
-      content: contentMatch[1].trim()
+      content: contentMatch[1].trim(),
+      analyzed: pages.length,
+      failed,
     };
   },
 
