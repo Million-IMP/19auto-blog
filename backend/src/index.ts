@@ -664,8 +664,8 @@ app.post('/api/posts/:id/osmu', async (req, res) => {
 });
 
 // --- 8 사용후기 (Feedback) ---
-// 쓰기는 누구나, 보기·삭제는 운영자만.
-app.get('/api/feedback', requireAdmin, async (req, res) => {
+// 쓰기·보기는 누구나, 삭제는 운영자만.
+app.get('/api/feedback', async (req, res) => {
   try {
     res.json(await listFeedback());
   } catch (error: any) {

@@ -33,12 +33,12 @@ function Stars({ value, size = 14 }: { value: number; size?: number }) {
   );
 }
 
-// 운영자만 후기를 보고 지운다. APP_PASSWORD로 로그인한다.
-function OwnerPanel({ refreshKey }: { refreshKey: number }) {
-  const [admin, setAdmin] = useState<boolean | null>(null);
-  const [open, setOpen] = useState(false);
-  const [password, setPassword] = useState('');
+// 후기는 누구나 본다. 운영자(APP_PASSWORD 로그인)일 때만 삭제 버튼이 보인다.
+function FeedbackList({ refreshKey }: { refreshKey: number }) {
   const [list, setList] = useState<FeedbackList | null>(null);
+  const [admin, setAdmin] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -46,13 +46,15 @@ function OwnerPanel({ refreshKey }: { refreshKey: number }) {
     fetch('/api/feedback')
       .then(async (r) => {
         const body = await r.json();
-        if (r.status === 401) return setAdmin(false);
         if (!r.ok) throw new Error(body.error || '후기를 불러오지 못했습니다.');
-        setAdmin(true);
         setList(body);
       })
-      .catch((e: Error) => setError(e.message));
+      .catch(() => setList({ items: [], count: 0, average: null }));
   };
+
+  useEffect(() => {
+    load();
+  }, [refreshKey]);
 
   useEffect(() => {
     fetch('/api/auth/status')
@@ -60,10 +62,6 @@ function OwnerPanel({ refreshKey }: { refreshKey: number }) {
       .then((body) => setAdmin(Boolean(body.admin)))
       .catch(() => setAdmin(false));
   }, []);
-
-  useEffect(() => {
-    if (admin && open) load();
-  }, [admin, open, refreshKey]);
 
   const login = async (e: FormEvent) => {
     e.preventDefault();
@@ -79,6 +77,7 @@ function OwnerPanel({ refreshKey }: { refreshKey: number }) {
       if (!r.ok) throw new Error(body.error || '로그인하지 못했습니다.');
       setPassword('');
       setAdmin(true);
+      setLoginOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : '로그인하지 못했습니다.');
     } finally {
@@ -89,8 +88,6 @@ function OwnerPanel({ refreshKey }: { refreshKey: number }) {
   const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
     setAdmin(false);
-    setList(null);
-    setOpen(false);
   };
 
   const remove = async (item: Feedback) => {
@@ -109,42 +106,30 @@ function OwnerPanel({ refreshKey }: { refreshKey: number }) {
     }
   };
 
-  if (!open) {
-    return (
-      <div className="mt-2 text-right">
-        <button type="button" onClick={() => setOpen(true)} className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600">
-          <Lock size={11} /> 운영자
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className="mt-3 bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between gap-2 mb-3">
         <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
-          <Lock size={14} className="text-slate-500" /> 받은 사용후기
-          {list && <span className="text-indigo-600">{list.count}개</span>}
+          사용후기 <span className="text-indigo-600">{list?.count ?? 0}</span>개
           {list?.average != null && (
             <span className="ml-2 flex items-center gap-1 text-xs font-normal text-slate-500">
               <Stars value={Math.round(list.average)} size={12} /> 평균 {list.average}점
             </span>
           )}
         </h3>
-        <div className="flex items-center gap-3">
-          {admin && (
-            <button type="button" onClick={logout} className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800">
-              <LogOut size={13} /> 로그아웃
-            </button>
-          )}
-          <button type="button" onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-700" aria-label="닫기">
-            <X size={18} />
+        {admin ? (
+          <button type="button" onClick={logout} className="inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-800">
+            <LogOut size={12} /> 운영자 로그아웃
           </button>
-        </div>
+        ) : (
+          <button type="button" onClick={() => setLoginOpen((v) => !v)} className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-slate-600">
+            <Lock size={11} /> 운영자
+          </button>
+        )}
       </div>
 
-      {admin === false && (
-        <form onSubmit={login} className="flex flex-col sm:flex-row gap-2">
+      {loginOpen && !admin && (
+        <form onSubmit={login} className="mb-3 flex flex-col sm:flex-row gap-2">
           <input
             type="password"
             value={password}
@@ -160,11 +145,13 @@ function OwnerPanel({ refreshKey }: { refreshKey: number }) {
         </form>
       )}
 
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {error && <p className="mb-2 text-sm text-red-600">{error}</p>}
 
-      {admin && !list && <p className="text-xs text-slate-500">후기를 불러오는 중입니다.</p>}
-      {admin && list && list.items.length === 0 && <p className="text-sm text-slate-500">아직 받은 후기가 없습니다.</p>}
-      {admin && list && list.items.length > 0 && (
+      {!list ? (
+        <p className="text-xs text-slate-500">후기를 불러오는 중입니다.</p>
+      ) : list.items.length === 0 ? (
+        <p className="text-sm text-slate-500">아직 후기가 없습니다. 첫 번째 후기의 주인공이 되어주세요! 🎉</p>
+      ) : (
         <ul className="space-y-3 max-h-96 overflow-y-auto pr-1">
           {list.items.map((item) => (
             <li key={item.id} className="border border-slate-100 bg-slate-50 rounded-lg p-3">
@@ -172,16 +159,18 @@ function OwnerPanel({ refreshKey }: { refreshKey: number }) {
                 <span className="text-sm font-semibold text-slate-800 truncate">{item.name}</span>
                 <div className="flex items-center gap-3 shrink-0">
                   <Stars value={item.rating} size={12} />
-                  <button
-                    type="button"
-                    onClick={() => remove(item)}
-                    disabled={busy}
-                    className="text-slate-400 hover:text-red-600 disabled:opacity-50"
-                    aria-label="후기 삭제"
-                    title="삭제"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {admin && (
+                    <button
+                      type="button"
+                      onClick={() => remove(item)}
+                      disabled={busy}
+                      className="text-slate-400 hover:text-red-600 disabled:opacity-50"
+                      aria-label="후기 삭제"
+                      title="삭제"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               </div>
               <p className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-relaxed">{item.content}</p>
@@ -276,7 +265,7 @@ export function FeedbackBoard() {
 
       {thanks && (
         <p className="mt-3 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
-          후기가 전달됐습니다. 소중한 의견 고맙습니다! 남겨주신 후기는 운영자만 봅니다.
+          후기가 등록됐습니다. 소중한 의견 고맙습니다!
         </p>
       )}
 
@@ -321,10 +310,7 @@ export function FeedbackBoard() {
               placeholder="어떤 기능을 써보셨나요? 좋았던 점, 아쉬운 점, 바라는 점을 자유롭게 적어주세요."
               className="mt-1 w-full p-2 text-sm border border-slate-300 rounded-md bg-slate-50 leading-relaxed"
             />
-            <span className="flex justify-between text-[11px] text-slate-400 font-normal">
-              <span>후기는 운영자에게만 보입니다.</span>
-              <span>{content.length}/500</span>
-            </span>
+            <span className="block text-right text-[11px] text-slate-400 font-normal">{content.length}/500</span>
           </label>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button
@@ -333,12 +319,12 @@ export function FeedbackBoard() {
             className="inline-flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
           >
             <Send size={15} />
-            {sending ? '보내는 중...' : '후기 보내기'}
+            {sending ? '등록 중...' : '후기 등록'}
           </button>
         </form>
       )}
 
-      <OwnerPanel refreshKey={refreshKey} />
+      <FeedbackList refreshKey={refreshKey} />
     </section>
   );
 }
