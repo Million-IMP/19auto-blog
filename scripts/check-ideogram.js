@@ -22,7 +22,7 @@ async function main() {
   form.append('prompt', 'flat illustration of a laptop on a desk');
   form.append('negative_prompt', 'text, letters, words, watermark, logo');
   form.append('aspect_ratio', '16x9');
-  form.append('rendering_speed', process.env.IDEOGRAM_RENDERING_SPEED || 'TURBO');
+  form.append('rendering_speed', (process.env.IDEOGRAM_RENDERING_SPEED || 'turbo').toLowerCase());
   form.append('seed', '1234');
   form.append('num_images', '1');
   const res = await fetch('https://api.ideogram.ai/v2/image/generate/ideogram-3?dry_run=true', {
@@ -31,7 +31,7 @@ async function main() {
     body: form,
   });
   console.log(`dry_run 응답 ${res.status}: ${(await res.text()).slice(0, 500)}`);
-  process.exit(res.ok ? 0 : 1);
+  process.exitCode = res.ok ? 0 : 1;
 }
 
 main().catch((err) => {

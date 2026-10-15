@@ -147,6 +147,7 @@ export async function regenerateImage(postId: number, index: number) {
   const content = scene.url ? post.content.split(scene.url).join(image.url) : post.content;
   scene.url = image.url;
   scene.seed = seed;
+  plan.provider = image.provider;
   return prisma.post.update({ where: { id: postId }, data: { content, imagePlan: JSON.stringify(plan) } });
 }
 

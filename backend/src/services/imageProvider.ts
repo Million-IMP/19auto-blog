@@ -91,7 +91,7 @@ const ideogram: ImageProvider = {
     form.append('prompt', `${req.style}. ${req.prompt}`);
     form.append('negative_prompt', 'text, letters, words, watermark, logo');
     form.append('aspect_ratio', closestAspectRatio(req.width, req.height));
-    form.append('rendering_speed', process.env.IDEOGRAM_RENDERING_SPEED || 'TURBO');
+    form.append('rendering_speed', (process.env.IDEOGRAM_RENDERING_SPEED || 'turbo').toLowerCase());
     form.append('seed', String(req.seed));
     form.append('num_images', '1');
 
