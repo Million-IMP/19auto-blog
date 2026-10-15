@@ -1,6 +1,6 @@
 import type { Post } from '@prisma/client';
 import { prisma } from '../db';
-import { aiService, extractUrlText, type DraftContext, type ImagePlan, type ImageScene, type Outline } from './aiService';
+import { aiService, extractUrlText, withDeadline, type DraftContext, type ImagePlan, type ImageScene, type Outline } from './aiService';
 import { imageProvider, randomSeed } from './imageProvider';
 import { scrapeArticle } from './scraperService';
 
@@ -38,7 +38,7 @@ export async function getBlogProfile() {
 export async function updateBlogProfile(input: ProfileInput) {
   const data: ProfileInput = {};
   for (const key of Object.keys(PROFILE_FIELDS) as (keyof typeof PROFILE_FIELDS)[]) {
-    if (input[key] !== undefined) data[key] = String(input[key] || '').trim();
+    if (input[key] !== undefined) data[key] = String(input[key] || '').trim().slice(0, 500);
   }
   return prisma.blogProfile.upsert({ where: { id: 1 }, update: data, create: { id: 1, ...data } });
 }
@@ -180,37 +180,63 @@ function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
-async function collectSources(brief: Brief) {
-  const urls = Array.from(new Set(brief.inboxContents.join('\n').match(/https?:\/\/[^\s]+/g) || [])).slice(0, 5);
-  const excerpts: Excerpt[] = [];
-  const lines: string[] = [];
-  for (const url of urls) {
-    try {
-      const article = await scrapeArticle(url);
-      if (!article.fullText.trim()) throw new Error('본문 없음');
-      excerpts.push({ url, title: article.title, site: article.siteName, text: article.fullText.slice(0, 3000) });
-      lines.push(`- [${article.title || url}](${url}) · ${article.siteName} · 확인일 ${today()} · 관찰(원문 읽음)`);
-    } catch {
-      const text = await extractUrlText(url);
-      if (text.startsWith('(URL 내용을 가져오는 데 실패')) {
-        lines.push(`- ${url} · 확인일 ${today()} · 확인 필요(원문을 읽지 못함)`);
-      } else {
-        excerpts.push({ url, title: url, site: new URL(url).hostname, text });
-        lines.push(`- ${url} · 확인일 ${today()} · 관찰(본문 일부만 읽음)`);
-      }
-    }
+// 수집 원문에서 뽑은 URL만 서버가 가져온다. 내부망 주소는 가져오지 않는다.
+function isPublicUrl(raw: string) {
+  try {
+    const { protocol, hostname } = new URL(raw);
+    if (protocol !== 'http:' && protocol !== 'https:') return false;
+    if (hostname === 'localhost' || hostname.endsWith('.local') || hostname.endsWith('.internal') || hostname.startsWith('[')) return false;
+    if (/^(0|10|127)\./.test(hostname) || /^169\.254\./.test(hostname) || /^192\.168\./.test(hostname)) return false;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return false;
+    return true;
+  } catch {
+    return false;
   }
+}
+
+async function readSource(url: string): Promise<{ excerpt: Excerpt | null; line: string }> {
+  if (!isPublicUrl(url)) {
+    return { excerpt: null, line: `- ${url} · 확인 필요(내부망·지원하지 않는 주소라 읽지 않음)` };
+  }
+  const article = await scrapeArticle(url).catch(() => null);
+  if (article?.fullText.trim()) {
+    return {
+      excerpt: { url, title: article.title, site: article.siteName, text: article.fullText.slice(0, 3000) },
+      line: `- [${article.title || url}](${url}) · ${article.siteName} · 확인일 ${today()} · 관찰(원문 읽음)`,
+    };
+  }
+  // 스크래퍼가 막힌 사이트도 단순 요청은 열리는 경우가 있어 한 번 더 시도한다.
+  const text = await extractUrlText(url);
+  if (text.startsWith('(URL 내용을 가져오는 데 실패')) {
+    return { excerpt: null, line: `- ${url} · 확인일 ${today()} · 확인 필요(원문을 읽지 못함)` };
+  }
+  return {
+    excerpt: { url, title: url, site: new URL(url).hostname, text },
+    line: `- ${url} · 확인일 ${today()} · 관찰(본문 일부만 읽음)`,
+  };
+}
+
+async function collectSources(brief: Brief) {
+  const urls = Array.from(new Set(brief.inboxContents.join('\n').match(/https?:\/\/[^\s)]+/g) || [])).slice(0, 5);
+  const results = await Promise.all(urls.map(readSource));
+  const excerpts = results.map((r) => r.excerpt).filter((e): e is Excerpt => e !== null);
+  const lines = results.map((r) => r.line);
   if (urls.length === 0) lines.push(`- 외부 출처 없음 · 수집 메모만 사용 · 확인 필요`);
   return { excerpts, markdown: lines.join('\n') };
+}
+
+// 프롬프트 입력 상한. 단계마다 같은 자료를 다시 보내므로 길이를 묶어 둔다.
+function cap(text: string, max: number) {
+  return text.length > max ? `${text.slice(0, max)}\n…(이하 생략)` : text;
 }
 
 function draftContext(brief: Brief, sources: string, profile: string): DraftContext {
   const excerpts = (brief.excerpts || []).map((e) => `[원문: ${e.title} (${e.site})]\n${e.text}`);
   return {
-    materials: [...brief.inboxContents, ...excerpts].join('\n\n'),
+    materials: cap([...brief.inboxContents, ...excerpts].join('\n\n'), 12_000),
     sources,
-    materialTemplates: brief.materialContents,
-    ruleTemplates: brief.ruleContents,
+    materialTemplates: brief.materialContents.map((m) => cap(m, 2_000)),
+    ruleTemplates: brief.ruleContents.map((r) => cap(r, 1_000)),
     profile,
   };
 }
@@ -280,34 +306,55 @@ async function runStage(current: Post): Promise<Post> {
   }
 }
 
-const advancing = new Set<number>();
-
-// deadline(ms 타임스탬프)이 지나면 다음 단계를 시작하지 않는다. Vercel 함수 60초 제한 대응.
-export function defaultDeadline() {
-  return process.env.VERCEL ? Date.now() + 25_000 : Infinity;
+// 요청 시작 시각 기준 마감. Vercel 함수 제한(60초) 안에서 끝내고, 남은 단계는 다음 실행이 이어간다.
+export function requestDeadline() {
+  return process.env.VERCEL ? Date.now() + 50_000 : Infinity;
 }
 
-export async function advancePost(postId: number, deadline = defaultDeadline()): Promise<Post> {
+// 남은 시간이 이보다 적으면 새 단계를 시작하지 않는다.
+const MIN_STAGE_MS = 20_000;
+// 단계 실행 중 잠금. 크론과 이어하기가 다른 인스턴스에서 같은 글을 동시에 처리하지 않게 한다.
+const LOCK_MS = 5 * 60_000;
+
+export function unlockedWhere() {
+  return { OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date() } }] };
+}
+
+async function claimPost(postId: number) {
+  const claimed = await prisma.post.updateMany({
+    where: { id: postId, ...unlockedWhere() },
+    data: { lockedUntil: new Date(Date.now() + LOCK_MS) },
+  });
+  return claimed.count === 1;
+}
+
+export async function advancePost(postId: number, deadline = requestDeadline(), options: { clearError?: boolean } = {}): Promise<Post> {
   let post = await prisma.post.findUnique({ where: { id: postId } });
   if (!post) throw new Error('글을 찾을 수 없습니다.');
-  if (advancing.has(postId)) return post;
-  advancing.add(postId);
+  if (post.stage === 'READY' || !(await claimPost(postId))) return post;
   try {
-    while (post.stage !== 'READY' && !post.stageError && Date.now() < deadline) {
+    if (options.clearError && post.stageError) {
+      post = await prisma.post.update({ where: { id: postId }, data: { stageError: null } });
+    }
+    while (post.stage !== 'READY' && !post.stageError && deadline - Date.now() >= MIN_STAGE_MS) {
+      const current: Post = post;
       try {
-        post = await runStage(post);
+        await prisma.post.update({ where: { id: postId }, data: { lockedUntil: new Date(Date.now() + LOCK_MS) } });
+        post = await withDeadline(deadline, () => runStage(current));
       } catch (err: any) {
-        const message = `[${post.stage}] ${String(err?.message || err)}`.slice(0, 300);
-        post = await prisma.post.update({ where: { id: postId }, data: { stageError: message } });
+        const message = `[${current.stage}] ${String(err?.message || err)}`.slice(0, 300);
+        await prisma.post.updateMany({ where: { id: postId }, data: { stageError: message } });
+        const latest = await prisma.post.findUnique({ where: { id: postId } });
+        if (!latest) throw new Error('작성 중에 글이 삭제되었습니다.');
+        post = latest;
       }
     }
     return post;
   } finally {
-    advancing.delete(postId);
+    await prisma.post.updateMany({ where: { id: postId }, data: { lockedUntil: null } });
   }
 }
 
-export async function resumePost(postId: number) {
-  await prisma.post.update({ where: { id: postId }, data: { stageError: null } });
-  return advancePost(postId);
+export async function resumePost(postId: number, deadline = requestDeadline()) {
+  return advancePost(postId, deadline, { clearError: true });
 }

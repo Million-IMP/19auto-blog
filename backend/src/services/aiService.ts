@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'async_hooks';
 import Anthropic from '@anthropic-ai/sdk';
 import dotenv from 'dotenv';
 import * as cheerio from 'cheerio';
@@ -74,12 +75,25 @@ ${numbered(input.materialTemplates, '자유 형식')}
 ${numbered(input.ruleTemplates, '제한 없음')}`;
 }
 
+// 요청 단위 마감 시각. Vercel 함수 제한 안에서 AI 호출이 끝나지 않으면 시간 초과 오류로 멈추고 이어하기로 재개한다.
+const deadlineStore = new AsyncLocalStorage<number>();
+
+export function withDeadline<T>(deadline: number, fn: () => Promise<T>) {
+  return deadlineStore.run(deadline, fn);
+}
+
 async function askText(prompt: string, maxTokens: number) {
-  const response = await anthropic.messages.create({
-    model: AI_MODEL,
-    max_tokens: maxTokens,
-    messages: [{ role: 'user', content: prompt }],
-  });
+  const deadline = deadlineStore.getStore() ?? Infinity;
+  const remaining = deadline - Date.now();
+  if (remaining < 5_000) throw new Error('남은 실행 시간이 부족합니다. 다음 실행에서 이어갑니다.');
+  const response = await anthropic.messages.create(
+    {
+      model: AI_MODEL,
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }],
+    },
+    Number.isFinite(remaining) ? { timeout: remaining - 2_000, maxRetries: 0 } : undefined
+  );
   const textBlock = response.content.find((block: any) => block.type === 'text') as any;
   const text = textBlock?.text || '';
   if (!text) throw new Error('AI 응답이 비어 있습니다.');
@@ -90,7 +104,7 @@ async function askText(prompt: string, maxTokens: number) {
 // 간단한 URL 스크래퍼 (네이버 블로그의 경우 iframe 내부 주소 우회 시도)
 export async function extractUrlText(url: string): Promise<string> {
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(8_000) });
     const html = await res.text();
     const $ = cheerio.load(html);
     
@@ -99,7 +113,7 @@ export async function extractUrlText(url: string): Promise<string> {
     if (iframeSrc) {
       const realUrl = iframeSrc.startsWith('http') ? iframeSrc : `https://blog.naver.com${iframeSrc}`;
       console.log("Fetching Naver Iframe:", realUrl);
-      const realRes = await fetch(realUrl);
+      const realRes = await fetch(realUrl, { signal: AbortSignal.timeout(8_000) });
       const realHtml = await realRes.text();
       const _$ = cheerio.load(realHtml);
       // 네이버 블로그 포스트의 실제 본문은 주로 .se-main-container 에 있음
@@ -248,9 +262,13 @@ ${contextBlock(input)}
 `;
     const text = await askText(prompt, 3000);
     const outline = parseJsonTag<Outline>(text, 'outline', '목차');
-    if (!outline.title || !Array.isArray(outline.sections) || outline.sections.length === 0) {
+    outline.sections = Array.isArray(outline.sections)
+      ? outline.sections.filter((s) => typeof s?.h2 === 'string' && s.h2.trim() && typeof s.answer === 'string')
+      : [];
+    if (typeof outline.title !== 'string' || !outline.title.trim() || outline.sections.length === 0) {
       throw new Error('목차 응답에 제목이나 소제목이 없습니다.');
     }
+    if (typeof outline.keyword !== 'string' || !outline.keyword.trim()) outline.keyword = input.keyword || outline.title;
     return outline;
   },
 

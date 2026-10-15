@@ -2,7 +2,7 @@ import { aiService } from './aiService';
 import { prisma } from '../db';
 import type { Post } from '@prisma/client';
 import { resolveDraftInputs } from './writingPlan';
-import { advancePost, createPipelinePost } from './draftPipeline';
+import { advancePost, createPipelinePost, requestDeadline, unlockedWhere } from './draftPipeline';
 
 const OSMU_PLATFORMS = ['INSTA', 'SHORTS', 'THREADS'] as const;
 
@@ -23,9 +23,11 @@ async function presentConfig(row: {
   autoOsmu: boolean;
   templateMaterialId: number | null;
 }) {
-  const failedCount = await prisma.inbox.count({
-    where: { processed: false, autoError: { not: null } },
-  });
+  const [inboxFailed, stageFailed] = await Promise.all([
+    prisma.inbox.count({ where: { processed: false, autoError: { not: null } } }),
+    prisma.post.count({ where: { stageError: { not: null } } }),
+  ]);
+  const failedCount = inboxFailed + stageFailed;
   return {
     enabled: row.enabled,
     batchSize: row.batchSize,
@@ -114,7 +116,7 @@ function describeProgress(post: Post) {
   return `#${post.id} ${post.stage} 단계에서 다음 실행으로 이어감`;
 }
 
-export async function runAutomationCycle(trigger: 'cron' | 'manual'): Promise<CycleResult> {
+export async function runAutomationCycle(trigger: 'cron' | 'manual', deadline = requestDeadline()): Promise<CycleResult> {
   if (running) {
     return {
       skipped: true,
@@ -135,20 +137,24 @@ export async function runAutomationCycle(trigger: 'cron' | 'manual'): Promise<Cy
 
   try {
     const config = await getAutomationConfig();
-    const deadline = process.env.VERCEL ? Date.now() + 30_000 : Infinity;
 
     // 1) 이전 실행에서 멈춘 초안을 멈춘 단계부터 이어서 진행
     const unfinished = await prisma.post.findMany({
-      where: { stage: { not: 'READY' }, stageError: null },
+      where: { stage: { not: 'READY' }, stageError: null, ...unlockedWhere() },
       orderBy: { createdAt: 'asc' },
       take: config.batchSize,
     });
     for (const pending of unfinished) {
       if (Date.now() >= deadline) break;
-      const post = await advancePost(pending.id, deadline);
-      if (post.stage === 'READY') drafted += 1;
-      if (post.stageError) failed += 1;
-      messages.push(describeProgress(post));
+      try {
+        const post = await advancePost(pending.id, deadline);
+        if (post.stage === 'READY') drafted += 1;
+        if (post.stageError) failed += 1;
+        messages.push(describeProgress(post));
+      } catch (err: any) {
+        failed += 1;
+        messages.push(`#${pending.id} 이어가기 실패: ${String(err?.message || err).slice(0, 200)}`);
+      }
     }
 
     // 2) 새 수집 항목 처리
@@ -246,12 +252,14 @@ export async function runAutomationCycle(trigger: 'cron' | 'manual'): Promise<Cy
     // 3) 완성된 파이프라인 초안 중 아직 채널 변환이 없는 글에 OSMU 생성
     if (config.autoOsmu && Date.now() < deadline) {
       const readyWithoutOsmu = await prisma.post.findMany({
-        where: { stage: 'READY', brief: { not: null }, parentPostId: null, derivatives: { none: {} } },
-        orderBy: { createdAt: 'asc' },
+        where: { stage: 'READY', status: 'DRAFT', brief: { not: null }, parentPostId: null, osmuAt: null },
+        orderBy: { createdAt: 'desc' },
         take: config.batchSize,
       });
       for (const post of readyWithoutOsmu) {
         if (Date.now() >= deadline) break;
+        const claimed = await prisma.post.updateMany({ where: { id: post.id, osmuAt: null }, data: { osmuAt: new Date() } });
+        if (claimed.count !== 1) continue;
         osmu += await createOsmuDrafts(post, messages);
       }
     }

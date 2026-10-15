@@ -4,7 +4,7 @@ import { aiService } from './services/aiService';
 import { scrapeArticle } from './services/scraperService';
 import { getAutomationConfig, runAutomationCycle, updateAutomationConfig } from './services/automationService';
 import { resolveDraftInputs } from './services/writingPlan';
-import { advancePost, createPipelinePost, getBlogProfile, regenerateImage, resumePost, updateBlogProfile } from './services/draftPipeline';
+import { advancePost, createPipelinePost, getBlogProfile, regenerateImage, requestDeadline, resumePost, updateBlogProfile } from './services/draftPipeline';
 import { prisma } from './db';
 import Parser from 'rss-parser';
 import cron from 'node-cron';
@@ -302,6 +302,7 @@ app.put('/api/automation', async (req, res) => {
 });
 
 app.post('/api/automation/run', async (req, res) => {
+  const deadline = requestDeadline();
   try {
     const addedCount = await fetchAllActiveRssFeeds();
     await prisma.systemLog.create({
@@ -310,7 +311,7 @@ app.post('/api/automation/run', async (req, res) => {
         message: addedCount > 0 ? `수동 수집 ${addedCount}건.` : '수동 수집: 새로운 기사 없음.',
       },
     });
-    const result = await runAutomationCycle('manual');
+    const result = await runAutomationCycle('manual', deadline);
     res.json({ ...result, addedCount });
   } catch (error: any) {
     console.error(error);
@@ -440,8 +441,16 @@ app.delete('/api/rules/:id', async (req, res) => {
 // --- 3 발행 & 초안 (Post) ---
 app.get('/api/posts', async (req, res) => {
   const items = await prisma.post.findMany({ orderBy: { createdAt: 'desc' } });
-  res.json(items);
+  res.json(items.map(({ brief, outline, lockedUntil, ...post }) => ({ ...post, isPipeline: brief !== null })));
 });
+
+// 작성이 끝나지 않은 글은 수정·발행·변환하지 않는다 (단계 결과가 덮어쓰는 것을 막음).
+async function requireReadyPost(id: number) {
+  const post = await prisma.post.findUnique({ where: { id } });
+  if (!post) throw Object.assign(new Error('글을 찾을 수 없습니다.'), { status: 404 });
+  if (post.stage !== 'READY') throw Object.assign(new Error('아직 작성 중인 글입니다. 완성된 뒤에 다시 시도해주세요.'), { status: 409 });
+  return post;
+}
 
 app.delete('/api/posts/:id', async (req, res) => {
   try {
@@ -454,6 +463,7 @@ app.delete('/api/posts/:id', async (req, res) => {
 
 // AI 초안 생성 
 app.post('/api/posts/generate', async (req, res) => {
+  const deadline = requestDeadline();
   try {
     const { keyword, inboxIds, materialIds, ruleIds } = req.body;
     const inboxes = await prisma.inbox.findMany({
@@ -480,7 +490,7 @@ app.post('/api/posts/generate', async (req, res) => {
     }
 
     // 단계별로 진행. 실패하면 stageError가 기록된 글이 그대로 반환되고 이어하기로 재개한다.
-    const post = await advancePost(created.id);
+    const post = await advancePost(created.id, deadline);
     res.json(post);
   } catch (error: any) {
     console.error(error);
@@ -491,7 +501,7 @@ app.post('/api/posts/generate', async (req, res) => {
 // 3.0.1 멈춘 단계부터 이어서 진행
 app.post('/api/posts/:id/resume', async (req, res) => {
   try {
-    const post = await resumePost(Number(req.params.id));
+    const post = await resumePost(Number(req.params.id), requestDeadline());
     res.json(post);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -528,6 +538,7 @@ app.put('/api/profile', async (req, res) => {
 app.put('/api/posts/:id', async (req, res) => {
   try {
     const { title, content } = req.body;
+    await requireReadyPost(Number(req.params.id));
     const post = await prisma.post.update({
       where: { id: Number(req.params.id) },
       data: {
@@ -537,21 +548,26 @@ app.put('/api/posts/:id', async (req, res) => {
     });
     res.json(post);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 500).json({ error: error.message });
   }
 });
 
 // 3.1 초안 발행 처리 (URL 저장 및 상태 변경)
 app.put('/api/posts/:id/publish', async (req, res) => {
-  const { publishedUrl } = req.body;
-  const post = await prisma.post.update({
-    where: { id: Number(req.params.id) },
-    data: {
-      status: 'PUBLISHED',
-      publishedUrl: publishedUrl
-    }
-  });
-  res.json(post);
+  try {
+    const { publishedUrl } = req.body;
+    await requireReadyPost(Number(req.params.id));
+    const post = await prisma.post.update({
+      where: { id: Number(req.params.id) },
+      data: {
+        status: 'PUBLISHED',
+        publishedUrl: publishedUrl
+      }
+    });
+    res.json(post);
+  } catch (error: any) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
 });
 
 // 3.2 OSMU 콘텐츠 생성
@@ -560,8 +576,7 @@ app.post('/api/posts/:id/osmu', async (req, res) => {
     const { id } = req.params;
     const { platform } = req.body; // 'INSTA', 'SHORTS', 'THREADS'
 
-    const parentPost = await prisma.post.findUnique({ where: { id: Number(id) } });
-    if (!parentPost) return res.status(404).json({ error: "Parent post not found" });
+    const parentPost = await requireReadyPost(Number(id));
 
     const osmuContent = await aiService.generateOSMUContent(parentPost.content, platform);
 
@@ -579,7 +594,7 @@ app.post('/api/posts/:id/osmu', async (req, res) => {
     res.json(post);
   } catch (error: any) {
     console.error(error);
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 500).json({ error: error.message });
   }
 });
 
@@ -592,7 +607,7 @@ app.get('/api/system-logs', async (req, res) => {
   res.json(logs);
 });
 
-export async function runHourlyPipeline() {
+export async function runHourlyPipeline(deadline = requestDeadline()) {
   console.log('🤖 [Cron] 정기 RSS 수집을 시작합니다...');
   try {
     const addedCount = await fetchAllActiveRssFeeds();
@@ -608,7 +623,7 @@ export async function runHourlyPipeline() {
 
     const config = await getAutomationConfig();
     if (config.enabled) {
-      await runAutomationCycle('cron');
+      await runAutomationCycle('cron', deadline);
     }
   } catch (error: any) {
     console.error('🤖 [Cron] RSS 수집 중 에러 발생:', error);

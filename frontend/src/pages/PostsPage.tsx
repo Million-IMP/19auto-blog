@@ -405,7 +405,7 @@ export function PostsPage() {
                   </span>
                 </div>
                 
-                {post.brief && (
+                {post.isPipeline && (
                   <PipelinePanel post={post} resuming={resumingId === post.id} onResume={() => handleResume(post.id)} onChanged={fetchPosts} />
                 )}
 
