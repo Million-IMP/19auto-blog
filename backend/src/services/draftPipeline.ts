@@ -1,6 +1,6 @@
 import type { Post } from '@prisma/client';
 import { prisma } from '../db';
-import { aiService, extractUrlText, withDeadline, type DraftContext, type ImagePlan, type ImageScene, type Outline } from './aiService';
+import { aiService, extractUrlText, remainingTime, withDeadline, type DraftContext, type ImagePlan, type ImageScene, type Outline } from './aiService';
 import { imageProvider, randomSeed } from './imageProvider';
 import { scrapeArticle } from './scraperService';
 
@@ -288,6 +288,8 @@ async function runStage(current: Post): Promise<Post> {
       const provider = imageProvider();
       for (const scene of [plan.cover, ...plan.sections]) {
         if (scene.url) continue;
+        // 장면마다 저장하므로, 시간이 부족하면 여기서 멈추고 다음 실행이 남은 장면부터 이어간다.
+        if (remainingTime() < MIN_STAGE_MS) return post;
         const seed = randomSeed();
         const isCover = scene === plan.cover;
         const image = await provider.render({ prompt: scene.prompt, style: plan.style, width: 800, height: isCover ? 400 : 450, seed });

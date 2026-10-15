@@ -1,3 +1,9 @@
+import fs from 'fs';
+import path from 'path';
+import { randomUUID } from 'crypto';
+import { put } from '@vercel/blob';
+import { remainingTime } from './aiService';
+
 // 이미지 생성 공급자. IMAGE_PROVIDER 환경변수로 바꾼다 (기본: pollinations).
 export type ImageRequest = {
   prompt: string;
@@ -26,11 +32,89 @@ const pollinations: ImageProvider = {
   },
 };
 
-// TODO(Ideogram): API 호출 구현. 응답 URL이 임시 주소라면 영구 저장소(예: Vercel Blob)에 올린 뒤 그 주소를 돌려줘야 한다.
+// --- Ideogram ---
+// 응답 이미지 주소는 일정 시간 뒤 사라지므로, 받은 즉시 내려받아 영구 저장소에 올린다.
+const IDEOGRAM_URL = 'https://api.ideogram.ai/v2/image/generate/ideogram-3';
+const ASPECT_RATIOS = ['1x3', '3x1', '1x2', '2x1', '9x16', '16x9', '10x16', '16x10', '2x3', '3x2', '3x4', '4x3', '4x5', '5x4', '1x1'];
+export const LOCAL_IMAGE_DIR = path.resolve(__dirname, '../../generated-images');
+
+function closestAspectRatio(width: number, height: number) {
+  const target = width / height;
+  let best = '1x1';
+  let bestDiff = Infinity;
+  for (const ratio of ASPECT_RATIOS) {
+    const [w, h] = ratio.split('x').map(Number);
+    const diff = Math.abs(Math.log(w / h / target));
+    if (diff < bestDiff) {
+      best = ratio;
+      bestDiff = diff;
+    }
+  }
+  return best;
+}
+
+function ideogramError(status: number, body: string) {
+  let detail = body.slice(0, 200);
+  try {
+    const parsed = JSON.parse(body);
+    detail = String(parsed.error || parsed.detail || parsed.message || detail).slice(0, 200);
+  } catch {}
+  const hint: Record<number, string> = {
+    401: 'IDEOGRAM_API_KEY가 올바른지 확인해주세요.',
+    402: 'Ideogram 크레딧이 부족합니다. 결제 정보와 잔액을 확인해주세요.',
+    422: '프롬프트가 안전 검사를 통과하지 못했습니다. 이 장면만 다시 생성해보세요.',
+    429: '요청이 너무 많습니다. 잠시 후 이어하기를 눌러주세요.',
+  };
+  return new Error(`Ideogram ${status}: ${hint[status] || detail}`);
+}
+
+// Vercel Blob 토큰이 있으면 Blob에, 로컬이면 backend/generated-images에 저장한다.
+async function storeImage(bytes: Buffer, contentType: string) {
+  const ext = contentType.includes('jpeg') ? 'jpg' : contentType.includes('webp') ? 'webp' : 'png';
+  const name = `${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`;
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    const blob = await put(`post-images/${name}`, bytes, { access: 'public', contentType });
+    return blob.url;
+  }
+  if (process.env.VERCEL) {
+    throw new Error('배포 환경에서 Ideogram을 쓰려면 BLOB_READ_WRITE_TOKEN(Vercel Blob)이 필요합니다.');
+  }
+  fs.mkdirSync(LOCAL_IMAGE_DIR, { recursive: true });
+  fs.writeFileSync(path.join(LOCAL_IMAGE_DIR, name), bytes);
+  return `/api/images/${name}`;
+}
+
 const ideogram: ImageProvider = {
   name: 'ideogram',
-  async render() {
-    throw new Error('Ideogram 연동은 아직 구현되지 않았습니다. IMAGE_PROVIDER를 비워 두면 pollinations를 씁니다.');
+  async render(req) {
+    const form = new FormData();
+    form.append('prompt', `${req.style}. ${req.prompt}`);
+    form.append('negative_prompt', 'text, letters, words, watermark, logo');
+    form.append('aspect_ratio', closestAspectRatio(req.width, req.height));
+    form.append('rendering_speed', process.env.IDEOGRAM_RENDERING_SPEED || 'TURBO');
+    form.append('seed', String(req.seed));
+    form.append('num_images', '1');
+
+    // Vercel 실행 시간 안에서 다운로드·저장까지 끝낼 여유를 남긴다.
+    const timeout = Math.min(40_000, remainingTime() - 8_000);
+    if (timeout < 5_000) throw new Error('남은 실행 시간이 부족합니다. 다음 실행에서 이어갑니다.');
+    const res = await fetch(IDEOGRAM_URL, {
+      method: 'POST',
+      headers: { 'Api-Key': String(process.env.IDEOGRAM_API_KEY) },
+      body: form,
+      signal: AbortSignal.timeout(timeout),
+    });
+    const body = await res.text();
+    if (!res.ok) throw ideogramError(res.status, body);
+
+    const image = JSON.parse(body).data?.[0];
+    if (!image?.url) throw new Error('Ideogram이 이미지를 돌려주지 않았습니다(안전 검사 미통과일 수 있음). 이 장면만 다시 생성해보세요.');
+
+    const download = await fetch(image.url, { signal: AbortSignal.timeout(20_000) });
+    if (!download.ok) throw new Error(`Ideogram 이미지 다운로드 실패: ${download.status}`);
+    const contentType = download.headers.get('content-type') || 'image/png';
+    const url = await storeImage(Buffer.from(await download.arrayBuffer()), contentType);
+    return { url, provider: 'ideogram' };
   },
 };
 

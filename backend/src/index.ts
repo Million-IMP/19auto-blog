@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
-import { aiService } from './services/aiService';
+import { aiService, withDeadline } from './services/aiService';
+import { LOCAL_IMAGE_DIR } from './services/imageProvider';
 import { scrapeArticle } from './services/scraperService';
 import { getAutomationConfig, runAutomationCycle, updateAutomationConfig } from './services/automationService';
 import { resolveDraftInputs } from './services/writingPlan';
@@ -554,10 +555,19 @@ app.post('/api/posts/:id/resume', async (req, res) => {
 // 3.0.3 이미지 한 장만 다시 생성 (0 = 표지, 1.. = 소제목 순서)
 app.post('/api/posts/:id/images/:index/regenerate', async (req, res) => {
   try {
-    res.json(await regenerateImage(Number(req.params.id), Number(req.params.index)));
+    res.json(await withDeadline(requestDeadline(), () => regenerateImage(Number(req.params.id), Number(req.params.index))));
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
+});
+
+// 3.0.4 로컬에 저장한 Ideogram 이미지 (Vercel에서는 Blob 주소를 쓰므로 쓰지 않는다)
+app.get('/api/images/:file', (req, res) => {
+  const file = String(req.params.file);
+  if (!/^[\w-]+\.(png|jpg|webp)$/.test(file)) return res.status(400).json({ error: '잘못된 파일 이름입니다.' });
+  res.sendFile(file, { root: LOCAL_IMAGE_DIR, maxAge: '30d' }, (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: '이미지를 찾을 수 없습니다.' });
+  });
 });
 
 // 3.0.2 블로그 프로필 (모든 초안 공통 기준)

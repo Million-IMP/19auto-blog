@@ -10,6 +10,7 @@
     "@anthropic-ai/sdk": "^0.132.1",
     "@prisma/client": "^5.22.0",
     "@types/node-cron": "^3.0.11",
+    "@vercel/blob": "^2.8.2",
     "cheerio": "^1.2.0",
     "cors": "^2.8.6",
     "dotenv": "^18.0.6",

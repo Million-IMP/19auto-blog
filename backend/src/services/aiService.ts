@@ -96,6 +96,10 @@ export function withDeadline<T>(deadline: number, fn: () => Promise<T>) {
   return deadlineStore.run(deadline, fn);
 }
 
+export function remainingTime() {
+  return (deadlineStore.getStore() ?? Infinity) - Date.now();
+}
+
 async function askText(prompt: string, maxTokens: number) {
   const deadline = deadlineStore.getStore() ?? Infinity;
   const remaining = deadline - Date.now();

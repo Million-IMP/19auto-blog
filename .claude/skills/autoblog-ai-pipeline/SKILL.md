@@ -21,7 +21,9 @@ description: AI 초안 생성·자동화 파이프라인. Use when editing promp
   - `generateOutline`, `generateBody`, `polishBody`, `planImages`, `replanScene`, `evaluateTopic`
   - 모든 함수가 `askText`를 거친다. 토큰 제한에 걸리거나 시간 초과가 나면 오류를 던진다.
 - `imageProvider.ts`
-  - `IMAGE_PROVIDER`로 고른다. 기본값은 pollinations이고, ideogram은 자리만 있다.
+  - `IMAGE_PROVIDER`로 고른다. 기본값은 pollinations, `ideogram`은 `IDEOGRAM_API_KEY`가 필요하다.
+  - Ideogram 응답 주소는 만료되므로 받은 즉시 저장한다: `BLOB_READ_WRITE_TOKEN`이 있으면 Vercel Blob, 로컬은 `backend/generated-images` → `/api/images/:file`.
+  - 설정 확인(과금 없음): `node scripts/check-ideogram.js`
 - `topicService.ts`
   - `evaluateInbox`, `draftFromTopic` (카드 1개당 초안 1개)
 - `publishService.ts`
