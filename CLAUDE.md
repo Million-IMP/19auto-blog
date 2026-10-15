@@ -16,7 +16,7 @@
 1. 백엔드 타입체크: `npx --prefix backend tsc --noEmit --esModuleInterop --skipLibCheck backend/src/index.ts`
 2. 프론트 린트: `npm run lint --prefix frontend`
 3. 프론트 빌드(타입체크 포함): `npm run build --prefix frontend`
-4. 테스트 러너는 아직 없다. 동작 확인은 `npm start` 후 화면/`curl http://localhost:3001/api/stats`로 한다.
+4. 백엔드 테스트: `npm test --prefix backend` (vitest, DB·AI는 mock). 화면 동작은 `npm start` 후 화면/`curl http://localhost:3001/api/stats`로 확인한다.
 
 ## 구조
 ```
