@@ -3,7 +3,8 @@ import axios from 'axios';
 import { 
   Send, Bot, Trash2, RotateCcw, Rss, Plus, X, Globe, 
   ExternalLink, Eye, Copy, BookOpen, Sparkles, Clock, 
-  Sun, Moon, FileText, CheckCheck
+  Sun, Moon, FileText, CheckCheck,
+  Lightbulb,
 } from 'lucide-react';
 
 const API_URL = '/api';
@@ -368,6 +369,20 @@ export function InboxPage() {
     setLoadingId(null);
   };
 
+  const handleEvaluateTopic = async (id: number) => {
+    setLoadingId(id);
+    try {
+      const res = await axios.post(`${API_URL}/topics/evaluate`, { inboxIds: [id] });
+      if (res.data.errors?.length) throw new Error(res.data.errors[0]);
+      if (confirm(`글감 카드 "${res.data.cards[0]?.keyword}"를 만들었습니다.\n글감 보드로 이동할까요?`)) {
+        window.location.href = '/topics';
+      }
+    } catch (e) {
+      alert(apiErrorMessage(e, e instanceof Error ? e.message : '글감 평가 중 오류가 발생했습니다.'));
+    }
+    setLoadingId(null);
+  };
+
   const handleDelete = async (id: number) => {
     if (!confirm("정말 삭제하시겠습니까?")) return;
     try {
@@ -648,6 +663,16 @@ export function InboxPage() {
                               className="bg-white text-slate-700 border border-slate-300 px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-slate-50"
                             >
                               다시 자동 시도
+                            </button>
+                          )}
+                          {!item.processed && (
+                            <button
+                              onClick={() => handleEvaluateTopic(item.id)}
+                              disabled={loadingId === item.id}
+                              className="bg-white text-amber-700 border border-amber-200 px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-amber-50 flex items-center gap-1.5 transition disabled:opacity-50"
+                              title="독자 질문·의도·빈틈·다음 행동으로 평가해 글감 보드에 올립니다"
+                            >
+                              <Lightbulb size={14} /> 글감 평가
                             </button>
                           )}
                           {!item.processed && (

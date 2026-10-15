@@ -1,9 +1,13 @@
 import express from 'express';
 import cors from 'cors';
-import { aiService } from './services/aiService';
+import { aiService, withDeadline } from './services/aiService';
+import { LOCAL_IMAGE_DIR } from './services/imageProvider';
 import { scrapeArticle } from './services/scraperService';
 import { getAutomationConfig, runAutomationCycle, updateAutomationConfig } from './services/automationService';
 import { resolveDraftInputs } from './services/writingPlan';
+import { markPublished, verifyPublished } from './services/publishService';
+import { draftFromTopic, evaluateInbox, TOPIC_STATUSES, updateTopic } from './services/topicService';
+import { advancePost, createPipelinePost, getBlogProfile, regenerateImage, requestDeadline, resumePost, updateBlogProfile } from './services/draftPipeline';
 import { prisma } from './db';
 import Parser from 'rss-parser';
 import cron from 'node-cron';
@@ -292,8 +296,8 @@ app.get('/api/automation', async (req, res) => {
 
 app.put('/api/automation', async (req, res) => {
   try {
-    const { enabled, batchSize, autoOsmu, templateMaterialId } = req.body;
-    const config = await updateAutomationConfig({ enabled, batchSize, autoOsmu, templateMaterialId });
+    const { enabled, batchSize, autoOsmu, templateMaterialId, draftSource } = req.body;
+    const config = await updateAutomationConfig({ enabled, batchSize, autoOsmu, templateMaterialId, draftSource });
     res.json(config);
   } catch (error: any) {
     res.status(400).json({ error: error.message });
@@ -301,6 +305,7 @@ app.put('/api/automation', async (req, res) => {
 });
 
 app.post('/api/automation/run', async (req, res) => {
+  const deadline = requestDeadline();
   try {
     const addedCount = await fetchAllActiveRssFeeds();
     await prisma.systemLog.create({
@@ -309,10 +314,51 @@ app.post('/api/automation/run', async (req, res) => {
         message: addedCount > 0 ? `수동 수집 ${addedCount}건.` : '수동 수집: 새로운 기사 없음.',
       },
     });
-    const result = await runAutomationCycle('manual');
+    const result = await runAutomationCycle('manual', deadline);
     res.json({ ...result, addedCount });
   } catch (error: any) {
     console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- 글감 보드 (Topic Cards) ---
+app.get('/api/topics', async (req, res) => {
+  try {
+    const status = String(req.query.status || '');
+    const cards = await prisma.topicCard.findMany({
+      where: TOPIC_STATUSES.includes(status) ? { status } : {},
+      orderBy: { createdAt: 'desc' },
+      take: 200,
+    });
+    res.json(cards);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 수집 항목을 글감 카드로 평가 (한 번에 최대 5건, AI 호출 1건씩)
+app.post('/api/topics/evaluate', async (req, res) => {
+  try {
+    res.json(await evaluateInbox(Array.isArray(req.body?.inboxIds) ? req.body.inboxIds : []));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/topics/:id', async (req, res) => {
+  try {
+    res.json(await updateTopic(Number(req.params.id), req.body || {}));
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.post('/api/topics/:id/draft', async (req, res) => {
+  const deadline = requestDeadline();
+  try {
+    res.json(await draftFromTopic(Number(req.params.id), deadline));
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -439,8 +485,16 @@ app.delete('/api/rules/:id', async (req, res) => {
 // --- 3 발행 & 초안 (Post) ---
 app.get('/api/posts', async (req, res) => {
   const items = await prisma.post.findMany({ orderBy: { createdAt: 'desc' } });
-  res.json(items);
+  res.json(items.map(({ brief, outline, lockedUntil, ...post }) => ({ ...post, isPipeline: brief !== null })));
 });
+
+// 작성이 끝나지 않은 글은 수정·발행·변환하지 않는다 (단계 결과가 덮어쓰는 것을 막음).
+async function requireReadyPost(id: number) {
+  const post = await prisma.post.findUnique({ where: { id } });
+  if (!post) throw Object.assign(new Error('글을 찾을 수 없습니다.'), { status: 404 });
+  if (post.stage !== 'READY') throw Object.assign(new Error('아직 작성 중인 글입니다. 완성된 뒤에 다시 시도해주세요.'), { status: 409 });
+  return post;
+}
 
 app.delete('/api/posts/:id', async (req, res) => {
   try {
@@ -453,6 +507,7 @@ app.delete('/api/posts/:id', async (req, res) => {
 
 // AI 초안 생성 
 app.post('/api/posts/generate', async (req, res) => {
+  const deadline = requestDeadline();
   try {
     const { keyword, inboxIds, materialIds, ruleIds } = req.body;
     const inboxes = await prisma.inbox.findMany({
@@ -460,29 +515,14 @@ app.post('/api/posts/generate', async (req, res) => {
     });
     const plan = await resolveDraftInputs({ keyword, inboxIds, materialIds, ruleIds });
     const inboxContents = inboxes.map(i => i.content);
-    const draftResult = await aiService.generateDirectDraft(
-      plan.keyword,
-      inboxContents,
-      plan.materialContents,
-      plan.ruleContents
-    );
-
-    // AI 썸네일 이미지 자동 첨부 (pollinations.ai 활용)
-    // 한글 키워드일 수 있으므로 영어로 번역하거나 직관적인 영단어 조합이 좋지만, pollinations는 한글 프롬프트도 어느정도 이해합니다.
-    const imagePrompt = encodeURIComponent(`high quality, blog cover, ${draftResult.keyword}`);
-    const imageUrl = `https://image.pollinations.ai/prompt/${imagePrompt}?width=800&height=400&nologo=true`;
-    const imageMarkdown = `![${draftResult.keyword}](${imageUrl})\n\n`;
-
-    // 5. Post 초안으로 DB 저장
-    const post = await prisma.post.create({
-      data: {
-        title: draftResult.title,
-        content: imageMarkdown + draftResult.content,
-        status: 'DRAFT',
-        keyword: draftResult.keyword,
-        platform: 'NAVER_BLOG',
-        inboxId: Array.isArray(inboxIds) && inboxIds.length === 1 ? Number(inboxIds[0]) : null
-      }
+    const created = await createPipelinePost({
+      brief: {
+        keyword: plan.keyword,
+        inboxContents,
+        materialContents: plan.materialContents,
+        ruleContents: plan.ruleContents,
+      },
+      inboxId: Array.isArray(inboxIds) && inboxIds.length === 1 ? Number(inboxIds[0]) : null,
     });
 
     // 선택된 Inbox 항목들 처리 완료 처리
@@ -493,9 +533,56 @@ app.post('/api/posts/generate', async (req, res) => {
       });
     }
 
+    // 단계별로 진행. 실패하면 stageError가 기록된 글이 그대로 반환되고 이어하기로 재개한다.
+    const post = await advancePost(created.id, deadline);
     res.json(post);
   } catch (error: any) {
     console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3.0.1 멈춘 단계부터 이어서 진행
+app.post('/api/posts/:id/resume', async (req, res) => {
+  try {
+    const post = await resumePost(Number(req.params.id), requestDeadline());
+    res.json(post);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3.0.3 이미지 한 장만 다시 생성 (0 = 표지, 1.. = 소제목 순서)
+app.post('/api/posts/:id/images/:index/regenerate', async (req, res) => {
+  try {
+    res.json(await withDeadline(requestDeadline(), () => regenerateImage(Number(req.params.id), Number(req.params.index))));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3.0.4 로컬에 저장한 Ideogram 이미지 (Vercel에서는 Blob 주소를 쓰므로 쓰지 않는다)
+app.get('/api/images/:file', (req, res) => {
+  const file = String(req.params.file);
+  if (!/^[\w-]+\.(png|jpg|webp)$/.test(file)) return res.status(400).json({ error: '잘못된 파일 이름입니다.' });
+  res.sendFile(file, { root: LOCAL_IMAGE_DIR, maxAge: '30d' }, (err) => {
+    if (err && !res.headersSent) res.status(404).json({ error: '이미지를 찾을 수 없습니다.' });
+  });
+});
+
+// 3.0.2 블로그 프로필 (모든 초안 공통 기준)
+app.get('/api/profile', async (req, res) => {
+  try {
+    res.json(await getBlogProfile());
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/profile', async (req, res) => {
+  try {
+    res.json(await updateBlogProfile(req.body || {}));
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
@@ -504,6 +591,7 @@ app.post('/api/posts/generate', async (req, res) => {
 app.put('/api/posts/:id', async (req, res) => {
   try {
     const { title, content } = req.body;
+    await requireReadyPost(Number(req.params.id));
     const post = await prisma.post.update({
       where: { id: Number(req.params.id) },
       data: {
@@ -513,21 +601,26 @@ app.put('/api/posts/:id', async (req, res) => {
     });
     res.json(post);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 500).json({ error: error.message });
   }
 });
 
 // 3.1 초안 발행 처리 (URL 저장 및 상태 변경)
 app.put('/api/posts/:id/publish', async (req, res) => {
-  const { publishedUrl } = req.body;
-  const post = await prisma.post.update({
-    where: { id: Number(req.params.id) },
-    data: {
-      status: 'PUBLISHED',
-      publishedUrl: publishedUrl
-    }
-  });
-  res.json(post);
+  try {
+    res.json(await markPublished(Number(req.params.id), req.body?.publishedUrl));
+  } catch (error: any) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
+// 3.1.1 공개 확인: 발행 주소를 실제로 열어 제목과 이미지가 보이는지 기록
+app.post('/api/posts/:id/verify', async (req, res) => {
+  try {
+    res.json(await verifyPublished(Number(req.params.id)));
+  } catch (error: any) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
 });
 
 // 3.2 OSMU 콘텐츠 생성
@@ -536,8 +629,7 @@ app.post('/api/posts/:id/osmu', async (req, res) => {
     const { id } = req.params;
     const { platform } = req.body; // 'INSTA', 'SHORTS', 'THREADS'
 
-    const parentPost = await prisma.post.findUnique({ where: { id: Number(id) } });
-    if (!parentPost) return res.status(404).json({ error: "Parent post not found" });
+    const parentPost = await requireReadyPost(Number(id));
 
     const osmuContent = await aiService.generateOSMUContent(parentPost.content, platform);
 
@@ -555,7 +647,7 @@ app.post('/api/posts/:id/osmu', async (req, res) => {
     res.json(post);
   } catch (error: any) {
     console.error(error);
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 500).json({ error: error.message });
   }
 });
 
@@ -568,7 +660,7 @@ app.get('/api/system-logs', async (req, res) => {
   res.json(logs);
 });
 
-export async function runHourlyPipeline() {
+export async function runHourlyPipeline(deadline = requestDeadline()) {
   console.log('🤖 [Cron] 정기 RSS 수집을 시작합니다...');
   try {
     const addedCount = await fetchAllActiveRssFeeds();
@@ -584,7 +676,7 @@ export async function runHourlyPipeline() {
 
     const config = await getAutomationConfig();
     if (config.enabled) {
-      await runAutomationCycle('cron');
+      await runAutomationCycle('cron', deadline);
     }
   } catch (error: any) {
     console.error('🤖 [Cron] RSS 수집 중 에러 발생:', error);

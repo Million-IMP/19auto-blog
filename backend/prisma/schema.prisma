@@ -59,8 +59,32 @@ model Post {
   parentPostId  Int?     // For OSMU (e.g. this is a short version of a blog post)
   parent        Post?    @relation("OSMU", fields: [parentPostId], references: [id], onDelete: Cascade)
   derivatives   Post[]   @relation("OSMU")
+  // 단계형 초안 파이프라인: SOURCES → OUTLINE → DRAFT → POLISH → IMAGES → READY
+  stage         String   @default("READY")
+  stageError    String?  // 실패한 단계의 오류. 이어하기 시 같은 단계부터 재시작
+  brief         String?  // 파이프라인 입력 (JSON: keyword, inboxContents, materialContents, ruleContents)
+  outline       String?  // OUTLINE 결과 (JSON: keyword, title, sections[])
+  sources       String?  // SOURCES 결과 (Markdown: 출처 · 확인일 · 종류)
+  imagePlan     String?  // IMAGES 계획 (JSON)
+  polishNotes   String?  // POLISH 대표 수정 전→후
+  lockedUntil   DateTime? // 단계 실행 중 잠금. 다른 실행(크론·이어하기)이 같은 글을 동시에 처리하지 않게 함
+  osmuAt        DateTime? // 자동 OSMU를 시도한 시각. 한 번만 시도
+  publishCheck  String?   // 공개 확인 결과 (JSON: checkedAt, ok, titleFound, imageCount, expectedImages, note)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+// 블로그 프로필 (한 행): 모든 초안에 공통으로 쓰는 독자·목적·말투·행동 유도
+model BlogProfile {
+  id            Int     @id
+  audience      String  @default("")
+  purpose       String  @default("")
+  tone          String  @default("")
+  structure     String  @default("")
+  ctaText       String  @default("")
+  ctaUrl        String  @default("")
+  imageStyle    String  @default("")
+  bannedPhrases String  @default("")
 }
 
 // 4 시스템 로그 (Cron 등 자동화 기록)
@@ -79,6 +103,7 @@ model AutomationConfig {
   batchSize          Int     @default(1)
   autoOsmu           Boolean @default(false)
   templateMaterialId Int?
+  draftSource        String  @default("ALL_RSS") // ALL_RSS: 새 RSS마다 초안 / SELECTED_TOPICS: 글감 보드에서 고른 것만
 }
 
 model RssFeed {
@@ -92,4 +117,24 @@ model RssFeed {
   inboxes            Inbox[]
   rules              Rule[]     @relation("FeedRules")
   materials          Material[] @relation("FeedMaterials")
+}
+
+// 7 글감 보드: 수집 항목을 독자 질문·의도·빈틈·다음 행동으로 평가한 카드
+model TopicCard {
+  id            Int      @id @default(autoincrement())
+  inboxId       Int?
+  keyword       String
+  topic         String   @default("")
+  intent        String   @default("")   // 검색 의도 (방법·비교·구매 등)
+  journey       String   @default("")   // 문제인식 / 탐색 / 비교 / 행동
+  question      String   @default("")   // 독자가 실제로 묻는 질문
+  why           String   @default("")   // 추천 이유
+  gap           String   @default("")   // 기존 답의 빈틈
+  myValue       String   @default("")   // 내가 더할 수 있는 것
+  nextStep      String   @default("NEW_POST") // NEW_POST, IMPROVE, RESEARCH
+  status        String   @default("CANDIDATE") // CANDIDATE, SELECTED, DISMISSED
+  evidence      String   @default("[]") // JSON: [{label, source, checkedAt, basis, kind: MEASURED|OBSERVED|HYPOTHESIS|UNVERIFIED}]
+  relatedPostId Int?     // 겹치는 내 기존 글
+  postId        Int?     // 이 카드로 만든 초안
+  createdAt     DateTime @default(now())
 }

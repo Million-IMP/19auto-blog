@@ -4,10 +4,17 @@
   "buildCommand": "node scripts/prepare-db.js && npm run build --prefix frontend",
   "outputDirectory": "frontend/dist",
   "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    {
+      "source": "/api/((?!cron/).*)",
+      "destination": "/api/server"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
   ],
   "functions": {
-    "api/[[...path]].ts": {
+    "api/server.ts": {
       "maxDuration": 60
     },
     "api/cron/daily.ts": {
