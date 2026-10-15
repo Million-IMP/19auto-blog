@@ -17,7 +17,7 @@ RssFeed(5) — 채널별 rules/materials 연결, AutomationConfig(6) — 자동 
 ## 런타임 두 가지
 | | 로컬 (`npm start`) | Vercel |
 |---|---|---|
-| 진입 | backend/src/index.ts `app.listen(3001)` | api/[[...path]].ts가 app import |
+| 진입 | backend/src/index.ts `app.listen(3001)` | api/server.ts가 app import (vercel.json rewrite) |
 | 스케줄 | node-cron 매시 정각 `runHourlyPipeline` | vercel.json crons 매일 00:00 UTC → /api/cron/daily (Bearer CRON_SECRET) |
 | DB | SQLite `backend/prisma/dev.db` | DATABASE_URL(Postgres) |
 | 프론트 | Vite 5173, /api 프록시 | frontend/dist 정적 + rewrite |

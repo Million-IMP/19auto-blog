@@ -20,7 +20,7 @@
 
 ## 구조
 ```
-api/[[...path]].ts      Vercel 함수 → backend/src/index.ts의 app 재사용
+api/server.ts           Vercel 함수(vercel.json rewrite로 /api/* 전부 수신) → backend/src/index.ts의 app 재사용
 api/cron/daily.ts       Vercel 크론(매일 00:00 UTC) → /api/cron/daily
 backend/src/index.ts    모든 Express 라우트 + 로컬 node-cron(매시 정각)
 backend/src/services/   aiService, automationService, writingPlan, scraperService
