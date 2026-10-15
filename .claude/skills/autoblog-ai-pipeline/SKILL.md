@@ -1,21 +1,46 @@
 ---
 name: autoblog-ai-pipeline
-description: AI 초안 생성·자동화 파이프라인. Use when editing prompts, aiService, automationService, writingPlan, RSS collection, cron, OSMU, or Anthropic model settings.
+description: AI 초안 생성·자동화 파이프라인. Use when editing prompts, aiService, draftPipeline, automationService, topicService, imageProvider, publishService, RSS collection, cron, OSMU, or Anthropic model settings.
 ---
 
 # AI Pipeline
 
+## 흐름
+```
+수집함 ─(글감 평가)→ TopicCard(글감 보드) ─(초안)┐
+수집함 ─(ALL_RSS 자동 / 수동 생성)────────────────┴→ Post 단계형 파이프라인
+  SOURCES → OUTLINE → DRAFT → POLISH → IMAGES → READY → (발행 처리 → 공개 확인)
+```
+
 ## 구성
-- `aiService` (services/aiService.ts): extractMaterialStructure, processInboxItem, generateDirectDraft, generateOSMUContent, quickSummarizeArticle
-- `runAutomationCycle(trigger)` (automationService.ts): 미처리 Inbox → 초안 batchSize개 생성, 실패 시 Inbox.autoError 기록
-- `resolveDraftInputs` (writingPlan.ts): Inbox의 rssFeed에 연결된 재료·규칙 → 없으면 전역 활성 항목
-- `runHourlyPipeline` (index.ts): 활성 RSS 수집 → AutomationConfig.enabled면 자동화 실행
-- 스크래핑: scraperService.scrapeArticle, 네이버 블로그는 #mainFrame iframe 우회
+- `draftPipeline.ts`
+  - `createPipelinePost`, `advancePost(id, deadline)`, `resumePost`, `regenerateImage`, 블로그 프로필
+  - 단계 결과는 Post 컬럼에 저장한다: `sources`, `outline`, `polishNotes`, `imagePlan`
+  - 실패하면 `stageError`가 남고, 이어하기는 같은 단계부터 재시작한다.
+- `aiService.ts`
+  - `generateOutline`, `generateBody`, `polishBody`, `planImages`, `replanScene`, `evaluateTopic`
+  - 모든 함수가 `askText`를 거친다. 토큰 제한에 걸리거나 시간 초과가 나면 오류를 던진다.
+- `imageProvider.ts`
+  - `IMAGE_PROVIDER`로 고른다. 기본값은 pollinations이고, ideogram은 자리만 있다.
+- `topicService.ts`
+  - `evaluateInbox`, `draftFromTopic` (카드 1개당 초안 1개)
+- `publishService.ts`
+  - `markPublished`: 중복 발행을 막는다.
+  - `verifyPublished`: 공개 화면에서 제목과 이미지를 확인한다.
+- `automationService.ts`
+  - `runAutomationCycle(trigger, deadline)` 실행 순서: 멈춘 글 이어가기 → 새 수집 처리 → 선택한 글감 초안 → OSMU(글마다 1회)
 
 ## 규칙
-- 모델: `process.env.ANTHROPIC_MODEL || 'claude-haiku-5-5'`. 하드코딩 금지.
-- 프롬프트에 넣는 외부 본문은 길이 제한(현재 3000자 수준) 유지 — 비용·컨텍스트 보호.
-- AI 응답 JSON 파싱 실패에 대비한 fallback 유지.
-- 같은 Inbox를 두 번 초안화하지 않도록 `Post.inboxId` 확인.
-- 썸네일은 pollinations.ai URL을 마크다운 이미지로 본문 앞에 붙인다.
-- Vercel 함수 maxDuration 60초 — 한 번의 크론에서 batchSize를 키우면 타임아웃 위험.
+- 모델은 `process.env.ANTHROPIC_MODEL || 'claude-haiku-5-5'`을 쓴다. 하드코딩하지 않는다.
+- 근거를 지어내지 않는다.
+  - 출처 없는 수치·경험담은 쓰지 않는다.
+  - 검색량·경쟁도는 측정 도구가 없으므로 항상 `UNVERIFIED`로 둔다.
+- Vercel 실행 시간 제한:
+  - `requestDeadline()`(50초)은 요청이 시작될 때 만들어 끝까지 전달한다.
+  - 새 단계는 20초 이상 남았을 때만 시작한다.
+- 동시 실행:
+  - `lockedUntil` 잠금(`claimPost`)을 거쳐야 단계를 실행할 수 있다.
+  - OSMU는 `osmuAt`을 먼저 선점한 글만 실행한다.
+- 작성 중인 글(stage ≠ READY)은 수정·발행·OSMU를 하지 않는다.
+- 서버가 가져오는 URL은 `isPublicUrl`로 내부망 주소를 걸러낸다.
+- 새 단계를 추가할 때는 `STAGES`, `runStage`, 프론트의 `PipelinePanel` STAGES를 함께 고친다.
