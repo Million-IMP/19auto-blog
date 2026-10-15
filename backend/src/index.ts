@@ -8,8 +8,9 @@ import { resolveDraftInputs } from './services/writingPlan';
 import { markPublished, verifyPublished } from './services/publishService';
 import { draftFromTopic, evaluateInbox, TOPIC_STATUSES, updateTopic } from './services/topicService';
 import { advancePost, createPipelinePost, getBlogProfile, regenerateImage, requestDeadline, resumePost, updateBlogProfile } from './services/draftPipeline';
+import { createFeedback, deleteFeedback, listFeedback, parseFeedback } from './services/feedbackService';
 import { prisma } from './db';
-import { authStatus, login, logout, requireAuth } from './auth';
+import { authStatus, login, logout, requireAdmin } from './auth';
 import Parser from 'rss-parser';
 import cron from 'node-cron';
 
@@ -24,9 +25,8 @@ process.on('unhandledRejection', (reason) => {
 
 app.use(cors());
 app.use(express.json());
-app.use(requireAuth);
 
-// --- 접근 제한 (APP_PASSWORD) ---
+// --- 운영자 로그인 (APP_PASSWORD) ---
 app.get('/api/auth/status', authStatus);
 app.post('/api/auth/login', login);
 app.post('/api/auth/logout', logout);
@@ -660,6 +660,35 @@ app.post('/api/posts/:id/osmu', async (req, res) => {
   } catch (error: any) {
     console.error(error);
     res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
+// --- 8 사용후기 (Feedback) ---
+// 쓰기·보기는 누구나, 삭제는 운영자만.
+app.get('/api/feedback', async (req, res) => {
+  try {
+    res.json(await listFeedback());
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/feedback', async (req, res) => {
+  const parsed = parseFeedback(req.body || {});
+  if (!parsed.ok) return res.status(400).json({ error: parsed.error });
+  try {
+    res.json(await createFeedback(parsed.data));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/feedback/:id', requireAdmin, async (req, res) => {
+  try {
+    await deleteFeedback(Number(req.params.id));
+    res.json({ ok: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 

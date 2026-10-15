@@ -138,3 +138,12 @@ model TopicCard {
   postId        Int?     // 이 카드로 만든 초안
   createdAt     DateTime @default(now())
 }
+
+// 8 사용후기: 같이 공부하는 사람들이 대시보드에 남기는 후기
+model Feedback {
+  id        Int      @id @default(autoincrement())
+  name      String
+  rating    Int      @default(5) // 1~5
+  content   String
+  createdAt DateTime @default(now())
+}

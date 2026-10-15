@@ -111,7 +111,7 @@ scripts/                start.js (로컬 실행), prepare-db.js (DB 준비), che
 2. 환경변수 입력 화면에서:
    - `ANTHROPIC_API_KEY` — 필수
    - `CRON_SECRET` — 아무 긴 문자열 (크론 호출 확인용)
-   - `APP_PASSWORD` — 사이트 비밀번호 (비우면 누구나 접속 가능)
+   - `APP_PASSWORD` — 운영자 비밀번호 (사용후기 삭제용. 사이트 접속은 누구나 가능)
    - `DB_PUSH_ON_BUILD` — `1`
 3. 첫 배포가 끝나면 Vercel 대시보드 → **Storage → Neon(Postgres) 추가** → 프로젝트에 연결합니다. `DATABASE_URL`이 자동으로 들어갑니다.
 4. **Settings → Environment Variables**에 `DIRECT_URL`을 추가하고 값으로 `DATABASE_URL_UNPOOLED`의 값을 넣습니다.
@@ -158,7 +158,7 @@ GitHub와 연결된 Vercel 프로젝트는 `master`에 푸시하면 자동으로
 | `DIRECT_URL` | | 풀링 없는 Postgres 주소 (없으면 `DATABASE_URL`) |
 | `DB_PUSH_ON_BUILD` | | `1`이면 Vercel 빌드 때 DB 구조 반영. 데이터가 지워지는 변경은 Prisma가 거부해 빌드가 멈춥니다 |
 | `CRON_SECRET` | 배포 시 권장 | 크론 호출 확인 (Vercel 크론 · GitHub Actions 공통) |
-| `APP_PASSWORD` | 배포 시 권장 | 설정하면 화면·API에 로그인 필요 (쿠키 30일). 크론은 제외 |
+| `APP_PASSWORD` | 배포 시 권장 | 운영자 비밀번호. 사용후기 삭제에 필요 (쿠키 30일). 사이트 접속은 누구나 가능 |
 | `IMAGE_PROVIDER` | | `ideogram` 또는 비움(pollinations) |
 | `IDEOGRAM_API_KEY` | Ideogram 사용 시 | |
 | `IDEOGRAM_RENDERING_SPEED` | | `turbo` · `default` · `quality` |

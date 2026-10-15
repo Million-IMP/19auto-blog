@@ -7,7 +7,7 @@ import { RulesPage } from './pages/RulesPage';
 import { PostsPage } from './pages/PostsPage';
 import { TopicsPage } from './pages/TopicsPage';
 import { ActivityPage } from './pages/ActivityPage';
-import { LoginGate } from './components/LoginGate';
+import { FeedbackBoard } from './components/FeedbackBoard';
 
 function Sidebar() {
   const location = useLocation();
@@ -192,6 +192,8 @@ function Dashboard() {
         <p className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3">{error}</p>
       )}
 
+      <FeedbackBoard />
+
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
         <Link to="/inbox" className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-blue-400 hover:shadow-md transition cursor-pointer group">
           <div className="flex items-center justify-between mb-3">
@@ -360,7 +362,6 @@ function Dashboard() {
 
 function App() {
   return (
-    <LoginGate>
     <Router>
       <div className="flex h-screen bg-slate-50 overflow-hidden text-slate-900 font-sans">
         <Sidebar />
@@ -377,7 +378,6 @@ function App() {
         </main>
       </div>
     </Router>
-    </LoginGate>
   );
 }
 
