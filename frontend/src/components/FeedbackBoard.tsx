@@ -107,7 +107,7 @@ function FeedbackList({ refreshKey }: { refreshKey: number }) {
   };
 
   return (
-    <div className="mt-3 bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+    <div className="p-5">
       <div className="flex items-center justify-between gap-2 mb-3">
         <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
           사용후기 <span className="text-indigo-600">{list?.count ?? 0}</span>개
@@ -227,9 +227,9 @@ export function FeedbackBoard() {
   };
 
   return (
-    <section className="mb-6">
-      {/* 눈에 띄는 안내 배너 */}
-      <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 p-5 shadow-md">
+    <section className="mb-6 bg-white border border-slate-200 rounded-xl shadow-md overflow-hidden">
+      {/* 카드 머리: 눈에 띄는 안내 배너. 감사 문구·작성 폼·목록은 모두 이 카드 안에 이어진다. */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 p-5">
         <div className="absolute -right-6 -top-6 h-28 w-28 rounded-full bg-white/10" />
         <div className="absolute right-16 -bottom-10 h-24 w-24 rounded-full bg-white/10" />
         <div className="relative flex flex-col sm:flex-row sm:items-center gap-4">
@@ -264,13 +264,13 @@ export function FeedbackBoard() {
       </div>
 
       {thanks && (
-        <p className="mt-3 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
+        <p className="text-sm text-emerald-700 bg-emerald-50 border-b border-emerald-200 px-5 py-3">
           후기가 등록됐습니다. 소중한 의견 고맙습니다!
         </p>
       )}
 
       {open && (
-        <form ref={formRef} onSubmit={submit} className="mt-3 bg-white border-2 border-indigo-200 rounded-xl p-5 shadow-sm space-y-3">
+        <form ref={formRef} onSubmit={submit} className="bg-indigo-50/40 border-b border-indigo-100 p-5 space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-slate-800">사용후기 쓰기</h3>
             <button type="button" onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-700" aria-label="닫기">
@@ -285,7 +285,7 @@ export function FeedbackBoard() {
                 onChange={(e) => setName(e.target.value)}
                 maxLength={20}
                 placeholder="예: 24기 홍길동"
-                className="mt-1 w-full p-2 text-sm border border-slate-300 rounded-md bg-slate-50"
+                className="mt-1 w-full p-2 text-sm border border-slate-300 rounded-md bg-white"
               />
             </label>
             <div className="text-xs font-semibold text-slate-600">
@@ -308,7 +308,7 @@ export function FeedbackBoard() {
               maxLength={500}
               rows={4}
               placeholder="어떤 기능을 써보셨나요? 좋았던 점, 아쉬운 점, 바라는 점을 자유롭게 적어주세요."
-              className="mt-1 w-full p-2 text-sm border border-slate-300 rounded-md bg-slate-50 leading-relaxed"
+              className="mt-1 w-full p-2 text-sm border border-slate-300 rounded-md bg-white leading-relaxed"
             />
             <span className="block text-right text-[11px] text-slate-400 font-normal">{content.length}/500</span>
           </label>
