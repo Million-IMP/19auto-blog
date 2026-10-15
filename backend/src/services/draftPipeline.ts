@@ -181,7 +181,7 @@ function today() {
 }
 
 // 수집 원문에서 뽑은 URL만 서버가 가져온다. 내부망 주소는 가져오지 않는다.
-function isPublicUrl(raw: string) {
+export function isPublicUrl(raw: string) {
   try {
     const { protocol, hostname } = new URL(raw);
     if (protocol !== 'http:' && protocol !== 'https:') return false;

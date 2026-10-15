@@ -4,6 +4,7 @@ import { aiService } from './services/aiService';
 import { scrapeArticle } from './services/scraperService';
 import { getAutomationConfig, runAutomationCycle, updateAutomationConfig } from './services/automationService';
 import { resolveDraftInputs } from './services/writingPlan';
+import { markPublished, verifyPublished } from './services/publishService';
 import { draftFromTopic, evaluateInbox, TOPIC_STATUSES, updateTopic } from './services/topicService';
 import { advancePost, createPipelinePost, getBlogProfile, regenerateImage, requestDeadline, resumePost, updateBlogProfile } from './services/draftPipeline';
 import { prisma } from './db';
@@ -597,16 +598,16 @@ app.put('/api/posts/:id', async (req, res) => {
 // 3.1 초안 발행 처리 (URL 저장 및 상태 변경)
 app.put('/api/posts/:id/publish', async (req, res) => {
   try {
-    const { publishedUrl } = req.body;
-    await requireReadyPost(Number(req.params.id));
-    const post = await prisma.post.update({
-      where: { id: Number(req.params.id) },
-      data: {
-        status: 'PUBLISHED',
-        publishedUrl: publishedUrl
-      }
-    });
-    res.json(post);
+    res.json(await markPublished(Number(req.params.id), req.body?.publishedUrl));
+  } catch (error: any) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
+// 3.1.1 공개 확인: 발행 주소를 실제로 열어 제목과 이미지가 보이는지 기록
+app.post('/api/posts/:id/verify', async (req, res) => {
+  try {
+    res.json(await verifyPublished(Number(req.params.id)));
   } catch (error: any) {
     res.status(error.status || 500).json({ error: error.message });
   }

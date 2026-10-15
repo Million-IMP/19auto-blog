@@ -69,6 +69,7 @@ model Post {
   polishNotes   String?  // POLISH 대표 수정 전→후
   lockedUntil   DateTime? // 단계 실행 중 잠금. 다른 실행(크론·이어하기)이 같은 글을 동시에 처리하지 않게 함
   osmuAt        DateTime? // 자동 OSMU를 시도한 시각. 한 번만 시도
+  publishCheck  String?   // 공개 확인 결과 (JSON: checkedAt, ok, titleFound, imageCount, expectedImages, note)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }

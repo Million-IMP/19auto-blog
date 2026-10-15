@@ -13,6 +13,35 @@ function apiErrorMessage(error: unknown, fallback: string) {
   return body || fallback;
 }
 
+type PublishCheck = { checkedAt: string; ok: boolean; titleFound: boolean; imageCount: number; expectedImages: number; note: string };
+
+// 발행 처리 ≠ 공개 확인. 실제 공개 화면에서 제목과 이미지가 보이는지 확인한 결과를 보여준다.
+function PublishCheckBadge({ raw, verifying, onVerify }: { raw: string | null; verifying: boolean; onVerify: () => void }) {
+  let check: PublishCheck | null = null;
+  try {
+    check = raw ? JSON.parse(raw) : null;
+  } catch {
+    check = null;
+  }
+  return (
+    <div className="flex items-center gap-2">
+      {check ? (
+        <span
+          title={`${new Date(check.checkedAt).toLocaleString()} · ${check.note}`}
+          className={`text-[11px] font-semibold px-2 py-1 rounded border ${check.ok ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`}
+        >
+          {check.ok ? `공개 확인됨 · 이미지 ${check.imageCount}/${check.expectedImages}` : `확인 실패 · ${check.note}`}
+        </span>
+      ) : (
+        <span className="text-[11px] font-semibold px-2 py-1 rounded border bg-amber-50 text-amber-700 border-amber-200">공개 미확인</span>
+      )}
+      <button onClick={onVerify} disabled={verifying} className="text-xs border border-slate-300 text-slate-700 px-2.5 py-1.5 rounded-md font-semibold hover:bg-slate-50 disabled:opacity-50">
+        {verifying ? '확인 중...' : check ? '다시 확인' : '공개 확인'}
+      </button>
+    </div>
+  );
+}
+
 export function PostsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const statusFilter = searchParams.get('status') === 'published'
@@ -35,6 +64,7 @@ export function PostsPage() {
   
   const [osmuLoading, setOsmuLoading] = useState<number | null>(null);
   const [resumingId, setResumingId] = useState<number | null>(null);
+  const [verifyingId, setVerifyingId] = useState<number | null>(null);
   const [publishUrls, setPublishUrls] = useState<{[key: number]: string}>({});
   const [rawViewIds, setRawViewIds] = useState<number[]>([]);
 
@@ -133,6 +163,17 @@ export function PostsPage() {
       alert(apiErrorMessage(e, "OSMU 변환 중 오류가 발생했습니다."));
     }
     setOsmuLoading(null);
+  };
+
+  const handleVerify = async (id: number) => {
+    setVerifyingId(id);
+    try {
+      await axios.post(`${API_URL}/posts/${id}/verify`);
+      fetchPosts();
+    } catch (e) {
+      alert(apiErrorMessage(e, "공개 확인 중 오류가 발생했습니다."));
+    }
+    setVerifyingId(null);
   };
 
   const handleResume = async (id: number) => {
@@ -477,6 +518,9 @@ export function PostsPage() {
                       <a href={post.publishedUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 mr-2 font-medium">
                         <Link2 size={14}/> 발행 링크 열기
                       </a>
+                    )}
+                    {post.status === 'PUBLISHED' && post.publishedUrl && (
+                      <PublishCheckBadge raw={post.publishCheck} verifying={verifyingId === post.id} onVerify={() => handleVerify(post.id)} />
                     )}
                     
                     {/* 네이버 스마트에디터 맞춤 서식 복사 버튼 */}
