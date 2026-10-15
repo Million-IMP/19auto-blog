@@ -6,6 +6,7 @@ import { MaterialsPage } from './pages/MaterialsPage';
 import { RulesPage } from './pages/RulesPage';
 import { PostsPage } from './pages/PostsPage';
 import { TopicsPage } from './pages/TopicsPage';
+import { LoginGate } from './components/LoginGate';
 
 function Sidebar() {
   const location = useLocation();
@@ -353,6 +354,7 @@ function Dashboard() {
 
 function App() {
   return (
+    <LoginGate>
     <Router>
       <div className="flex h-screen bg-slate-50 overflow-hidden text-slate-900 font-sans">
         <Sidebar />
@@ -368,6 +370,7 @@ function App() {
         </main>
       </div>
     </Router>
+    </LoginGate>
   );
 }
 

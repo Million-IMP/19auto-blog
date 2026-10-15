@@ -9,6 +9,7 @@ import { markPublished, verifyPublished } from './services/publishService';
 import { draftFromTopic, evaluateInbox, TOPIC_STATUSES, updateTopic } from './services/topicService';
 import { advancePost, createPipelinePost, getBlogProfile, regenerateImage, requestDeadline, resumePost, updateBlogProfile } from './services/draftPipeline';
 import { prisma } from './db';
+import { authStatus, login, logout, requireAuth } from './auth';
 import Parser from 'rss-parser';
 import cron from 'node-cron';
 
@@ -23,6 +24,12 @@ process.on('unhandledRejection', (reason) => {
 
 app.use(cors());
 app.use(express.json());
+app.use(requireAuth);
+
+// --- 접근 제한 (APP_PASSWORD) ---
+app.get('/api/auth/status', authStatus);
+app.post('/api/auth/login', login);
+app.post('/api/auth/logout', logout);
 
 const PORT = process.env.PORT || 3001;
 const parser = new Parser();
