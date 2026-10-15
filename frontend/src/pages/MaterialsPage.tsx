@@ -2,6 +2,8 @@ import { useRef, useState, useEffect } from 'react';
 import axios from 'axios';
 import { Trash2, PenTool, Link as LinkIcon, Wand2 } from 'lucide-react';
 
+const MAX_BENCHMARK_URLS = 5;
+
 export function MaterialsPage() {
   const [items, setItems] = useState<any[]>([]);
   const [title, setTitle] = useState('');
@@ -36,14 +38,21 @@ export function MaterialsPage() {
     loadMaterials();
   }, []);
 
+  const extractUrls = [...new Set(extractUrl.split(/\s+/).map((u) => u.trim()).filter(Boolean))];
+  const tooManyUrls = extractUrls.length > MAX_BENCHMARK_URLS;
+
   const handleExtract = async () => {
-    if (!extractUrl.trim()) return alert("URL을 입력해주세요.");
+    if (extractUrls.length === 0) return alert("URL을 입력해주세요.");
+    if (tooManyUrls) return alert(`URL은 최대 ${MAX_BENCHMARK_URLS}개까지 비교할 수 있습니다.`);
     setIsExtracting(true);
     try {
-      const res = await axios.post('/api/materials/extract', { url: extractUrl });
+      const res = await axios.post('/api/materials/extract', { urls: extractUrls });
       setTitle(res.data.title);
       setContent(res.data.content);
-      alert("구조 추출이 완료되었습니다. 내용을 확인하고 '템플릿 추가하기'를 눌러 저장하세요.");
+      const failed: string[] = res.data.failed || [];
+      const summary = res.data.analyzed > 1 ? `${res.data.analyzed}개 글을 비교 분석했습니다.` : '구조 추출이 완료되었습니다.';
+      const failedNote = failed.length > 0 ? `\n\n읽지 못해 제외한 URL:\n${failed.join('\n')}` : '';
+      alert(`${summary} 내용을 확인하고 '저장하기'를 눌러 저장하세요.${failedNote}`);
       setExtractUrl('');
     } catch (e: any) {
       alert(e.response?.data?.error || "구조 추출 중 오류가 발생했습니다.");
@@ -120,25 +129,33 @@ export function MaterialsPage() {
         <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2"><PenTool size={16} className="text-emerald-500"/> 새 글감 템플릿 등록</h3>
         
         {/* 벤치마킹 URL 추출부 */}
-        <div className="mb-4 p-4 bg-emerald-50 rounded-md border border-emerald-100 flex flex-col md:flex-row gap-3 items-start md:items-center">
-          <div className="flex items-center gap-2 text-emerald-800 font-semibold text-sm shrink-0">
-            <LinkIcon size={16} /> URL로 구조 벤치마킹
+        <div className="mb-4 p-4 bg-emerald-50 rounded-md border border-emerald-100 flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-emerald-800 font-semibold text-sm">
+              <LinkIcon size={16} /> URL로 구조 벤치마킹
+              <span className="font-normal text-emerald-700 text-xs">여러 개를 넣으면 공통 패턴과 차별화 기회까지 비교합니다</span>
+            </div>
+            <span className={`text-xs font-semibold shrink-0 ${tooManyUrls ? 'text-red-600' : 'text-emerald-700'}`}>
+              {extractUrls.length}/{MAX_BENCHMARK_URLS}개
+            </span>
           </div>
-          <div className="flex-1 flex gap-2 w-full">
-            <input 
-              type="text" 
+          <div className="flex flex-col md:flex-row gap-2 w-full">
+            <textarea
               value={extractUrl}
               onChange={(e) => setExtractUrl(e.target.value)}
-              placeholder="참고하고 싶은 잘 쓰인 블로그 글의 URL을 붙여넣으세요"
-              className="flex-1 p-2 text-sm border border-emerald-200 rounded-md focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+              placeholder={'참고하고 싶은 잘 쓰인 블로그 글의 URL을 한 줄에 하나씩 붙여넣으세요 (최대 5개)\nhttps://blog.naver.com/...\nhttps://...'}
+              rows={3}
+              className="flex-1 p-2 text-sm border border-emerald-200 rounded-md focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white resize-y"
             />
-            <button 
-              type="button" 
+            <button
+              type="button"
               onClick={handleExtract}
-              disabled={isExtracting}
-              className="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-emerald-700 transition shadow-sm flex items-center gap-1.5 disabled:opacity-50 shrink-0"
+              disabled={isExtracting || tooManyUrls}
+              className="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-emerald-700 transition shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50 shrink-0 md:self-start"
             >
-              {isExtracting ? <span className="animate-pulse">분석 중...</span> : <><Wand2 size={14} /> AI 뼈대 추출</>}
+              {isExtracting
+                ? <span className="animate-pulse">분석 중...</span>
+                : <><Wand2 size={14} /> {extractUrls.length > 1 ? `${extractUrls.length}개 비교 분석` : 'AI 뼈대 추출'}</>}
             </button>
           </div>
         </div>
