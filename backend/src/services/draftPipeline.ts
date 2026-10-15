@@ -336,10 +336,25 @@ async function claimPost(postId: number) {
   return claimed.count === 1;
 }
 
+// 글 하나의 결과(완성·단계 실패)를 활동 기록에 남긴다. 기록 실패가 작성을 막지 않게 한다.
+async function logPostResult(before: Post, after: Post, startedAt: number) {
+  const seconds = Math.round((Date.now() - startedAt) / 1000);
+  const name = `#${after.id} "${after.title}"`;
+  let entry: { event: string; message: string } | null = null;
+  if (after.stage === 'READY' && before.stage !== 'READY') {
+    entry = { event: 'POST_READY', message: `${name} 초안 완성 (${before.stage}부터, ${seconds}초)` };
+  } else if (after.stageError && after.stageError !== before.stageError) {
+    entry = { event: 'POST_STAGE_ERROR', message: `${name} ${after.stageError} (${seconds}초)` };
+  }
+  if (entry) await prisma.systemLog.create({ data: entry }).catch(() => {});
+}
+
 export async function advancePost(postId: number, deadline = requestDeadline(), options: { clearError?: boolean } = {}): Promise<Post> {
   let post = await prisma.post.findUnique({ where: { id: postId } });
   if (!post) throw new Error('글을 찾을 수 없습니다.');
   if (post.stage === 'READY' || !(await claimPost(postId))) return post;
+  const startPost = post;
+  const startedAt = Date.now();
   try {
     if (options.clearError && post.stageError) {
       post = await prisma.post.update({ where: { id: postId }, data: { stageError: null } });
@@ -357,6 +372,7 @@ export async function advancePost(postId: number, deadline = requestDeadline(), 
         post = latest;
       }
     }
+    await logPostResult(startPost, post, startedAt);
     return post;
   } finally {
     await prisma.post.updateMany({ where: { id: postId }, data: { lockedUntil: null } });

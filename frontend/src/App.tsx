@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Home, Inbox, Archive, BookOpen, FileText, Bot, Lightbulb } from 'lucide-react';
+import { Home, Inbox, Archive, BookOpen, FileText, Bot, Lightbulb, Activity } from 'lucide-react';
 import { InboxPage } from './pages/InboxPage';
 import { MaterialsPage } from './pages/MaterialsPage';
 import { RulesPage } from './pages/RulesPage';
 import { PostsPage } from './pages/PostsPage';
 import { TopicsPage } from './pages/TopicsPage';
+import { ActivityPage } from './pages/ActivityPage';
 import { LoginGate } from './components/LoginGate';
 
 function Sidebar() {
@@ -27,6 +28,10 @@ function Sidebar() {
         <Link to="/" className={`flex items-center space-x-3 px-3 py-2.5 rounded-lg transition text-sm ${isActive('/')}`}>
           <Home size={18} />
           <span>대시보드</span>
+        </Link>
+        <Link to="/activity" className={`flex items-center space-x-3 px-3 py-2.5 rounded-lg transition text-sm ${isActive('/activity')}`}>
+          <Activity size={18} />
+          <span>활동 기록</span>
         </Link>
         <div className="pt-6 pb-2">
           <p className="px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">데이터 수집</p>
@@ -236,17 +241,18 @@ function Dashboard() {
 
       <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center gap-3 mb-6">
         <div className="bg-slate-100 p-2 rounded-md"><Bot size={16} className="text-slate-600" /></div>
-        <div>
+        <div className="flex-1 min-w-0">
           <h3 className="text-sm font-semibold text-slate-800">최근 봇 활동</h3>
           {stats?.lastLog ? (
             <p className="text-xs text-slate-500 mt-1">
-              {new Date(stats.lastLog.createdAt).toLocaleString()} <span className="mx-2 text-slate-300">|</span> <span className="font-medium text-slate-700">{stats.lastLog.message}</span>
+              {new Date(stats.lastLog.createdAt).toLocaleString()} <span className="mx-2 text-slate-300">|</span> <span className="font-medium text-slate-700">{stats.lastLog.message.split('\n')[0]}</span>
               <span className="ml-2 text-slate-400">활성 RSS {stats.activeRss}개</span>
             </p>
           ) : (
             <p className="text-xs text-slate-500 mt-1">{stats ? '아직 기록된 봇 활동이 없습니다.' : '집계를 불러오는 중입니다.'}</p>
           )}
         </div>
+        <Link to="/activity" className="text-xs text-slate-600 hover:text-slate-900 font-medium shrink-0">전체 기록 보기 →</Link>
       </div>
 
       <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
@@ -362,6 +368,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/inbox" element={<InboxPage />} />
+            <Route path="/activity" element={<ActivityPage />} />
             <Route path="/topics" element={<TopicsPage />} />
             <Route path="/materials" element={<MaterialsPage />} />
             <Route path="/rules" element={<RulesPage />} />
