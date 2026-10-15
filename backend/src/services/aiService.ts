@@ -17,6 +17,34 @@ export type Outline = {
   sections: { h2: string; answer: string; needsSource?: boolean }[];
 };
 
+export type ImageScene = {
+  h2?: string;
+  point: string;
+  scene: string;
+  must: string;
+  avoid: string;
+  prompt: string;
+  url?: string;
+  seed?: number;
+};
+
+export type ImagePlan = {
+  style: string;
+  provider?: string;
+  cover: ImageScene;
+  sections: ImageScene[];
+};
+
+function parseJsonTag<T>(text: string, tag: string, label: string): T {
+  const match = text.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`));
+  const raw = match ? match[1] : text;
+  try {
+    return JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
+  } catch {
+    throw new Error(`${label} 응답을 JSON으로 읽지 못했습니다: ${raw.trim().slice(0, 120)}`);
+  }
+}
+
 export type DraftContext = {
   materials: string;
   sources: string;
@@ -219,16 +247,7 @@ ${contextBlock(input)}
 </outline>
 `;
     const text = await askText(prompt, 3000);
-    const match = text.match(/<outline>([\s\S]*?)<\/outline>/);
-    const raw = match ? match[1] : text;
-    const start = raw.indexOf('{');
-    const end = raw.lastIndexOf('}');
-    let outline: Outline;
-    try {
-      outline = JSON.parse(raw.slice(start, end + 1));
-    } catch {
-      throw new Error(`목차 응답을 JSON으로 읽지 못했습니다: ${raw.trim().slice(0, 120)}`);
-    }
+    const outline = parseJsonTag<Outline>(text, 'outline', '목차');
     if (!outline.title || !Array.isArray(outline.sections) || outline.sections.length === 0) {
       throw new Error('목차 응답에 제목이나 소제목이 없습니다.');
     }
@@ -303,6 +322,62 @@ ${content}
       throw new Error('교정 결과가 원문보다 지나치게 짧아 적용하지 않았습니다.');
     }
     return { content: polished, notes: notesMatch ? notesMatch[1].trim() : '' };
+  },
+
+  // 2-4. IMAGES 단계: 글 톤에서 스타일 1개를 정하고 표지 1장 + 소제목마다 1장 장면 계획
+  async planImages(input: { title: string; keyword: string; content: string; headings: string[]; profileStyle: string }) {
+    const prompt = `
+당신은 블로그 이미지 아트 디렉터입니다. 아래 글에 들어갈 이미지 세트를 계획하세요. 이미지는 만들지 않고 계획만 합니다.
+
+[제목] ${input.title}
+[핵심어] ${input.keyword}
+[정해진 스타일] ${input.profileStyle || '없음 (본문의 주제와 톤을 보고 하나 정함)'}
+[소제목 목록]
+${input.headings.map((h, i) => `${i + 1}. ${h}`).join('\n')}
+
+[본문]
+${input.content.slice(0, 6000)}
+
+[원칙]
+- 한 글에는 스타일 하나만 씁니다. 정해진 스타일이 있으면 그대로 씁니다. style은 영어 한 문장(화풍·색감·조명).
+- 표지 1장은 글 전체의 의미를, 소제목 이미지는 그 소제목 본문이 설명하는 장면을 보여줍니다. 제목 단어만 보고 고르지 않습니다.
+- 장면끼리 구도와 소재가 겹치지 않게 합니다.
+- 이미지 안에 글자·숫자·로고·도표를 넣지 않습니다. 실제 인물이나 상표를 그리지 않습니다.
+- prompt는 영어로, 장면·필수 요소만 구체적으로 씁니다(스타일 문장은 prompt에 다시 쓰지 않음).
+- sections의 h2는 소제목 목록의 문구를 글자 그대로 씁니다.
+
+아래 형식의 JSON만 <plan> 태그 안에 출력하세요.
+<plan>
+{"style": "...", "cover": {"point": "전달할 뜻(한국어)", "scene": "장면(한국어)", "must": "필수 요소", "avoid": "제외 요소", "prompt": "..."}, "sections": [{"h2": "...", "point": "...", "scene": "...", "must": "...", "avoid": "...", "prompt": "..."}]}
+</plan>
+`;
+    const text = await askText(prompt, 8000);
+    const plan = parseJsonTag<ImagePlan>(text, 'plan', '이미지 계획');
+    if (!plan.style || !plan.cover?.prompt || !Array.isArray(plan.sections)) {
+      throw new Error('이미지 계획에 스타일이나 표지가 없습니다.');
+    }
+    return plan;
+  },
+
+  // 겹치는 장면 하나만 다시 계획한다.
+  async replanScene(input: { h2: string; section: string; style: string; avoidPrompts: string[] }) {
+    const prompt = `
+블로그 소제목 하나에 들어갈 이미지 장면을 새로 계획하세요. 아래 기존 장면들과 구도·소재가 겹치면 안 됩니다.
+
+[스타일] ${input.style}
+[소제목] ${input.h2}
+[소제목 본문]
+${input.section.slice(0, 2000)}
+
+[이미 쓴 장면 prompt]
+${input.avoidPrompts.map((p) => `- ${p}`).join('\n')}
+
+이미지 안에 글자·숫자·로고를 넣지 않습니다. prompt는 영어.
+<scene>
+{"h2": "${input.h2}", "point": "...", "scene": "...", "must": "...", "avoid": "...", "prompt": "..."}
+</scene>
+`;
+    return parseJsonTag<ImageScene>(await askText(prompt, 1000), 'scene', '장면 계획');
   },
 
   // 3. 기존 블로그 글을 바탕으로 OSMU (인스타, 숏츠, 스레드 등) 콘텐츠 변환

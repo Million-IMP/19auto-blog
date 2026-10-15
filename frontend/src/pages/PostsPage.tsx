@@ -406,7 +406,7 @@ export function PostsPage() {
                 </div>
                 
                 {post.brief && (
-                  <PipelinePanel post={post} resuming={resumingId === post.id} onResume={() => handleResume(post.id)} />
+                  <PipelinePanel post={post} resuming={resumingId === post.id} onResume={() => handleResume(post.id)} onChanged={fetchPosts} />
                 )}
 
                 {/* Content body / Inline editor */}

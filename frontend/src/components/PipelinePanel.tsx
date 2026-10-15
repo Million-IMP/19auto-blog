@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { RotateCw, ChevronDown, ChevronRight } from 'lucide-react';
@@ -18,7 +19,50 @@ type PipelinePost = {
   stageError: string | null;
   sources: string | null;
   polishNotes: string | null;
+  imagePlan: string | null;
 };
+
+type ImageScene = { h2?: string; point: string; scene: string; must: string; avoid: string; url?: string };
+type ImagePlan = { style: string; provider?: string; cover: ImageScene; sections: ImageScene[] };
+
+function readPlan(raw: string | null): ImagePlan | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function ImagePlanList({ plan, regenerating, onRegenerate }: { plan: ImagePlan; regenerating: number | null; onRegenerate: (index: number) => void }) {
+  const scenes = [{ label: '표지', scene: plan.cover }, ...plan.sections.map((s) => ({ label: s.h2 || '', scene: s }))];
+  return (
+    <div className="not-prose space-y-2">
+      <p className="text-slate-600">
+        <b>스타일</b> {plan.style} {plan.provider && <span className="text-slate-400">· {plan.provider}</span>}
+      </p>
+      {scenes.map(({ label, scene }, index) => (
+        <div key={index} className="flex gap-3 items-start bg-white border border-slate-200 rounded p-2">
+          {scene.url ? <img src={scene.url} alt={scene.point} className="w-28 h-16 object-cover rounded shrink-0 bg-slate-100" /> : <div className="w-28 h-16 rounded bg-slate-100 shrink-0" />}
+          <div className="flex-1 min-w-0 space-y-0.5">
+            <p className="font-semibold text-slate-800 truncate">{label}</p>
+            <p className="text-slate-600">{scene.scene}</p>
+            <p className="text-slate-400">필수: {scene.must} · 제외: {scene.avoid}</p>
+          </div>
+          {scene.url && (
+            <button
+              onClick={() => onRegenerate(index)}
+              disabled={regenerating !== null}
+              className="shrink-0 border border-slate-300 rounded px-2 py-1 font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50 flex items-center gap-1"
+            >
+              <RotateCw size={11} className={regenerating === index ? 'animate-spin' : ''} /> 다시 생성
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -36,9 +80,22 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-export function PipelinePanel({ post, resuming, onResume }: { post: PipelinePost; resuming: boolean; onResume: () => void }) {
+export function PipelinePanel({ post, resuming, onResume, onChanged }: { post: PipelinePost; resuming: boolean; onResume: () => void; onChanged: () => void }) {
   const current = STAGES.findIndex((s) => s.key === post.stage);
   const failed = Boolean(post.stageError);
+  const plan = readPlan(post.imagePlan);
+  const [regenerating, setRegenerating] = useState<number | null>(null);
+
+  const handleRegenerate = async (index: number) => {
+    setRegenerating(index);
+    try {
+      await axios.post(`/api/posts/${post.id}/images/${index}/regenerate`);
+      onChanged();
+    } catch (e: any) {
+      alert(e.response?.data?.error || '이미지를 다시 만들지 못했습니다.');
+    }
+    setRegenerating(null);
+  };
 
   return (
     <div className="mb-4 border border-slate-200 rounded-md p-3 space-y-2 bg-white">
@@ -86,6 +143,11 @@ export function PipelinePanel({ post, resuming, onResume }: { post: PipelinePost
       {post.sources && (
         <Section title="출처 · 확인일">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{post.sources}</ReactMarkdown>
+        </Section>
+      )}
+      {plan && (
+        <Section title={`이미지 계획 · ${1 + plan.sections.length}장`}>
+          <ImagePlanList plan={plan} regenerating={regenerating} onRegenerate={handleRegenerate} />
         </Section>
       )}
       {post.polishNotes && (

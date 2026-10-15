@@ -4,7 +4,7 @@ import { aiService } from './services/aiService';
 import { scrapeArticle } from './services/scraperService';
 import { getAutomationConfig, runAutomationCycle, updateAutomationConfig } from './services/automationService';
 import { resolveDraftInputs } from './services/writingPlan';
-import { advancePost, createPipelinePost, getBlogProfile, resumePost, updateBlogProfile } from './services/draftPipeline';
+import { advancePost, createPipelinePost, getBlogProfile, regenerateImage, resumePost, updateBlogProfile } from './services/draftPipeline';
 import { prisma } from './db';
 import Parser from 'rss-parser';
 import cron from 'node-cron';
@@ -493,6 +493,15 @@ app.post('/api/posts/:id/resume', async (req, res) => {
   try {
     const post = await resumePost(Number(req.params.id));
     res.json(post);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3.0.3 이미지 한 장만 다시 생성 (0 = 표지, 1.. = 소제목 순서)
+app.post('/api/posts/:id/images/:index/regenerate', async (req, res) => {
+  try {
+    res.json(await regenerateImage(Number(req.params.id), Number(req.params.index)));
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
