@@ -40,7 +40,7 @@ description: AI 초안 생성·자동화 파이프라인. Use when editing promp
   - 출처 없는 수치·경험담은 쓰지 않는다.
   - 검색량·경쟁도는 측정 도구가 없으므로 항상 `UNVERIFIED`로 둔다.
 - Vercel 실행 시간 제한:
-  - `requestDeadline()`(50초)은 요청이 시작될 때 만들어 끝까지 전달한다.
+  - `requestDeadline()`(Vercel 280초, vercel.json maxDuration 300초와 짝)은 요청이 시작될 때 만들어 끝까지 전달한다.
   - 새 단계는 20초 이상 남았을 때만 시작한다.
 - 동시 실행:
   - `lockedUntil` 잠금(`claimPost`)을 거쳐야 단계를 실행할 수 있다.
