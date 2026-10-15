@@ -1,6 +1,8 @@
 import { aiService } from './aiService';
 import { prisma } from '../db';
+import type { Post } from '@prisma/client';
 import { resolveDraftInputs } from './writingPlan';
+import { advancePost, createPipelinePost } from './draftPipeline';
 
 const OSMU_PLATFORMS = ['INSTA', 'SHORTS', 'THREADS'] as const;
 
@@ -81,10 +83,35 @@ function isRssItem(content: string) {
   return content.startsWith('[RSS -');
 }
 
-function coverMarkdown(keyword: string) {
-  const imagePrompt = encodeURIComponent(`high quality, blog cover, ${keyword}`);
-  const imageUrl = `https://image.pollinations.ai/prompt/${imagePrompt}?width=800&height=400&nologo=true`;
-  return `![${keyword}](${imageUrl})\n\n`;
+// 채널별 변환은 따로 실패 처리해서 한 채널의 실패가 다른 채널을 막지 않게 한다.
+async function createOsmuDrafts(post: Post, messages: string[]) {
+  let created = 0;
+  for (const platform of OSMU_PLATFORMS) {
+    try {
+      const osmuContent = await aiService.generateOSMUContent(post.content, platform);
+      await prisma.post.create({
+        data: {
+          title: `[${platform}] ${post.title}`,
+          content: osmuContent,
+          status: 'DRAFT',
+          keyword: post.keyword,
+          platform,
+          parentPostId: post.id,
+          inboxId: post.inboxId,
+        },
+      });
+      created += 1;
+    } catch (osmuErr: any) {
+      messages.push(`${platform} 변환 실패: ${osmuErr.message}`);
+    }
+  }
+  return created;
+}
+
+function describeProgress(post: Post) {
+  if (post.stage === 'READY') return `초안 "${post.title}"`;
+  if (post.stageError) return `#${post.id} ${post.stageError}`;
+  return `#${post.id} ${post.stage} 단계에서 다음 실행으로 이어감`;
 }
 
 export async function runAutomationCycle(trigger: 'cron' | 'manual'): Promise<CycleResult> {
@@ -108,17 +135,37 @@ export async function runAutomationCycle(trigger: 'cron' | 'manual'): Promise<Cy
 
   try {
     const config = await getAutomationConfig();
-    const items = await prisma.inbox.findMany({
-      where: { processed: false, autoError: null },
-      orderBy: { createdAt: 'desc' },
+    const deadline = process.env.VERCEL ? Date.now() + 30_000 : Infinity;
+
+    // 1) 이전 실행에서 멈춘 초안을 멈춘 단계부터 이어서 진행
+    const unfinished = await prisma.post.findMany({
+      where: { stage: { not: 'READY' }, stageError: null },
+      orderBy: { createdAt: 'asc' },
       take: config.batchSize,
     });
+    for (const pending of unfinished) {
+      if (Date.now() >= deadline) break;
+      const post = await advancePost(pending.id, deadline);
+      if (post.stage === 'READY') drafted += 1;
+      if (post.stageError) failed += 1;
+      messages.push(describeProgress(post));
+    }
 
-    if (items.length === 0) {
+    // 2) 새 수집 항목 처리
+    const items = Date.now() < deadline
+      ? await prisma.inbox.findMany({
+          where: { processed: false, autoError: null },
+          orderBy: { createdAt: 'desc' },
+          take: config.batchSize,
+        })
+      : [];
+
+    if (items.length === 0 && unfinished.length === 0) {
       messages.push('처리할 수집 항목이 없습니다.');
     }
 
     for (const item of items) {
+      if (Date.now() >= deadline) break;
       try {
         if (isRssItem(item.content)) {
           const existing = await prisma.post.findFirst({
@@ -134,46 +181,25 @@ export async function runAutomationCycle(trigger: 'cron' | 'manual'): Promise<Cy
           }
 
           const plan = await resolveDraftInputs({ inboxIds: [item.id] });
-          const draftResult = await aiService.generateDirectDraft(
-            plan.keyword,
-            [item.content],
-            plan.materialContents,
-            plan.ruleContents
-          );
-          const post = await prisma.post.create({
-            data: {
-              title: draftResult.title,
-              content: coverMarkdown(draftResult.keyword) + draftResult.content,
-              status: 'DRAFT',
-              keyword: draftResult.keyword,
-              platform: 'NAVER_BLOG',
-              inboxId: item.id,
+          const created = await createPipelinePost({
+            brief: {
+              keyword: plan.keyword,
+              inboxContents: [item.content],
+              materialContents: plan.materialContents,
+              ruleContents: plan.ruleContents,
             },
+            inboxId: item.id,
           });
-          drafted += 1;
-          messages.push(`초안 "${post.title}"`);
-
-          if (config.autoOsmu) {
-            for (const platform of OSMU_PLATFORMS) {
-              try {
-                const osmuContent = await aiService.generateOSMUContent(post.content, platform);
-                await prisma.post.create({
-                  data: {
-                    title: `[${platform}] ${post.title}`,
-                    content: osmuContent,
-                    status: 'DRAFT',
-                    keyword: post.keyword,
-                    platform,
-                    parentPostId: post.id,
-                    inboxId: item.id,
-                  },
-                });
-                osmu += 1;
-              } catch (osmuErr: any) {
-                messages.push(`${platform} 변환 실패: ${osmuErr.message}`);
-              }
-            }
-          }
+          // 초안 글이 생기면 이후 재시도는 글의 단계(stage)에서 이어간다.
+          await prisma.inbox.update({
+            where: { id: item.id },
+            data: { processed: true, autoError: null },
+          });
+          const post = await advancePost(created.id, deadline);
+          if (post.stage === 'READY') drafted += 1;
+          if (post.stageError) failed += 1;
+          messages.push(describeProgress(post));
+          continue;
         } else {
           const aiResult = await aiService.processInboxItem(item.content);
           const category = String(aiResult.category || '').trim().toUpperCase();
@@ -214,6 +240,19 @@ export async function runAutomationCycle(trigger: 'cron' | 'manual'): Promise<Cy
           data: { autoError: message },
         });
         messages.push(`#${item.id} 실패: ${message}`);
+      }
+    }
+
+    // 3) 완성된 파이프라인 초안 중 아직 채널 변환이 없는 글에 OSMU 생성
+    if (config.autoOsmu && Date.now() < deadline) {
+      const readyWithoutOsmu = await prisma.post.findMany({
+        where: { stage: 'READY', brief: { not: null }, parentPostId: null, derivatives: { none: {} } },
+        orderBy: { createdAt: 'asc' },
+        take: config.batchSize,
+      });
+      for (const post of readyWithoutOsmu) {
+        if (Date.now() >= deadline) break;
+        osmu += await createOsmuDrafts(post, messages);
       }
     }
 

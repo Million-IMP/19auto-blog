@@ -4,6 +4,7 @@ import axios from 'axios';
 import { PenTool, CheckCircle, Copy, Trash2, Link2, Video, Image as ImageIcon, MessageCircle, Eye, EyeOff, Edit3, Save, X, BarChart2, FileCheck } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { PipelinePanel } from '../components/PipelinePanel';
 
 const API_URL = '/api';
 
@@ -33,6 +34,7 @@ export function PostsPage() {
   const [generating, setGenerating] = useState(false);
   
   const [osmuLoading, setOsmuLoading] = useState<number | null>(null);
+  const [resumingId, setResumingId] = useState<number | null>(null);
   const [publishUrls, setPublishUrls] = useState<{[key: number]: string}>({});
   const [rawViewIds, setRawViewIds] = useState<number[]>([]);
 
@@ -88,12 +90,15 @@ export function PostsPage() {
     
     setGenerating(true);
     try {
-      await axios.post(`${API_URL}/posts/generate`, { 
-        keyword, 
+      const res = await axios.post(`${API_URL}/posts/generate`, {
+        keyword,
         inboxIds: selectedInboxIds,
         materialIds: selectedMaterialIds,
         ruleIds: selectedRuleIds
       });
+      if (res.data?.stageError) {
+        alert(`초안 작성이 멈췄습니다: ${res.data.stageError}\n글 카드의 '이어하기'로 멈춘 단계부터 다시 시작할 수 있습니다.`);
+      }
       fetchPosts();
       await fetchFormData(); // 수집함 및 규칙 상태 갱신 (await 추가)
       setKeyword('');
@@ -128,6 +133,18 @@ export function PostsPage() {
       alert(apiErrorMessage(e, "OSMU 변환 중 오류가 발생했습니다."));
     }
     setOsmuLoading(null);
+  };
+
+  const handleResume = async (id: number) => {
+    setResumingId(id);
+    try {
+      const res = await axios.post(`${API_URL}/posts/${id}/resume`);
+      if (res.data?.stageError) alert(`다시 멈췄습니다: ${res.data.stageError}`);
+      fetchPosts();
+    } catch (e) {
+      alert(apiErrorMessage(e, "이어하기 중 오류가 발생했습니다."));
+    }
+    setResumingId(null);
   };
 
   const handleStartEdit = (post: any) => {
@@ -388,6 +405,10 @@ export function PostsPage() {
                   </span>
                 </div>
                 
+                {post.brief && (
+                  <PipelinePanel post={post} resuming={resumingId === post.id} onResume={() => handleResume(post.id)} />
+                )}
+
                 {/* Content body / Inline editor */}
                 {isEditing ? (
                   <div className="space-y-3">

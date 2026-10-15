@@ -4,6 +4,7 @@ import { aiService } from './services/aiService';
 import { scrapeArticle } from './services/scraperService';
 import { getAutomationConfig, runAutomationCycle, updateAutomationConfig } from './services/automationService';
 import { resolveDraftInputs } from './services/writingPlan';
+import { advancePost, createPipelinePost, getBlogProfile, resumePost, updateBlogProfile } from './services/draftPipeline';
 import { prisma } from './db';
 import Parser from 'rss-parser';
 import cron from 'node-cron';
@@ -460,29 +461,14 @@ app.post('/api/posts/generate', async (req, res) => {
     });
     const plan = await resolveDraftInputs({ keyword, inboxIds, materialIds, ruleIds });
     const inboxContents = inboxes.map(i => i.content);
-    const draftResult = await aiService.generateDirectDraft(
-      plan.keyword,
-      inboxContents,
-      plan.materialContents,
-      plan.ruleContents
-    );
-
-    // AI 썸네일 이미지 자동 첨부 (pollinations.ai 활용)
-    // 한글 키워드일 수 있으므로 영어로 번역하거나 직관적인 영단어 조합이 좋지만, pollinations는 한글 프롬프트도 어느정도 이해합니다.
-    const imagePrompt = encodeURIComponent(`high quality, blog cover, ${draftResult.keyword}`);
-    const imageUrl = `https://image.pollinations.ai/prompt/${imagePrompt}?width=800&height=400&nologo=true`;
-    const imageMarkdown = `![${draftResult.keyword}](${imageUrl})\n\n`;
-
-    // 5. Post 초안으로 DB 저장
-    const post = await prisma.post.create({
-      data: {
-        title: draftResult.title,
-        content: imageMarkdown + draftResult.content,
-        status: 'DRAFT',
-        keyword: draftResult.keyword,
-        platform: 'NAVER_BLOG',
-        inboxId: Array.isArray(inboxIds) && inboxIds.length === 1 ? Number(inboxIds[0]) : null
-      }
+    const created = await createPipelinePost({
+      brief: {
+        keyword: plan.keyword,
+        inboxContents,
+        materialContents: plan.materialContents,
+        ruleContents: plan.ruleContents,
+      },
+      inboxId: Array.isArray(inboxIds) && inboxIds.length === 1 ? Number(inboxIds[0]) : null,
     });
 
     // 선택된 Inbox 항목들 처리 완료 처리
@@ -493,9 +479,38 @@ app.post('/api/posts/generate', async (req, res) => {
       });
     }
 
+    // 단계별로 진행. 실패하면 stageError가 기록된 글이 그대로 반환되고 이어하기로 재개한다.
+    const post = await advancePost(created.id);
     res.json(post);
   } catch (error: any) {
     console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3.0.1 멈춘 단계부터 이어서 진행
+app.post('/api/posts/:id/resume', async (req, res) => {
+  try {
+    const post = await resumePost(Number(req.params.id));
+    res.json(post);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3.0.2 블로그 프로필 (모든 초안 공통 기준)
+app.get('/api/profile', async (req, res) => {
+  try {
+    res.json(await getBlogProfile());
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/profile', async (req, res) => {
+  try {
+    res.json(await updateBlogProfile(req.body || {}));
+  } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });

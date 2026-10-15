@@ -59,8 +59,29 @@ model Post {
   parentPostId  Int?     // For OSMU (e.g. this is a short version of a blog post)
   parent        Post?    @relation("OSMU", fields: [parentPostId], references: [id], onDelete: Cascade)
   derivatives   Post[]   @relation("OSMU")
+  // 단계형 초안 파이프라인: SOURCES → OUTLINE → DRAFT → POLISH → IMAGES → READY
+  stage         String   @default("READY")
+  stageError    String?  // 실패한 단계의 오류. 이어하기 시 같은 단계부터 재시작
+  brief         String?  // 파이프라인 입력 (JSON: keyword, inboxContents, materialContents, ruleContents)
+  outline       String?  // OUTLINE 결과 (JSON: keyword, title, sections[])
+  sources       String?  // SOURCES 결과 (Markdown: 출처 · 확인일 · 종류)
+  imagePlan     String?  // IMAGES 계획 (JSON)
+  polishNotes   String?  // POLISH 대표 수정 전→후
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+// 블로그 프로필 (한 행): 모든 초안에 공통으로 쓰는 독자·목적·말투·행동 유도
+model BlogProfile {
+  id            Int     @id
+  audience      String  @default("")
+  purpose       String  @default("")
+  tone          String  @default("")
+  structure     String  @default("")
+  ctaText       String  @default("")
+  ctaUrl        String  @default("")
+  imageStyle    String  @default("")
+  bannedPhrases String  @default("")
 }
 
 // 4 시스템 로그 (Cron 등 자동화 기록)

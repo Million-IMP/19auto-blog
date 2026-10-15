@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Trash2, AlertCircle } from 'lucide-react';
+import { BlogProfileForm } from '../components/BlogProfileForm';
 
 const RULE_TYPES = [
   { value: 'TONE', label: '말투/어조' },
@@ -102,7 +103,9 @@ export function RulesPage() {
           <p className="text-sm text-slate-500 mt-1">AI가 글을 작성할 때 반드시 참고하는 나만의 톤앤매너, 금지어 등을 관리합니다.</p>
         </div>
       </div>
-      
+
+      <BlogProfileForm />
+
       <div className="bg-white border border-slate-200 rounded-lg p-5 mb-6 shadow-sm">
         <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2"><AlertCircle size={16} className="text-orange-500"/> 새 규칙(가이드) 등록</h3>
         <form onSubmit={handleAdd} className="flex flex-col gap-3">

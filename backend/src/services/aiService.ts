@@ -11,8 +11,56 @@ const anthropic = new Anthropic({
 // 환경변수 기반 AI 모델 지정 (기본값: claude-haiku-5-5)
 const AI_MODEL = process.env.ANTHROPIC_MODEL || 'claude-haiku-5-5';
 
+export type Outline = {
+  keyword: string;
+  title: string;
+  sections: { h2: string; answer: string; needsSource?: boolean }[];
+};
+
+export type DraftContext = {
+  materials: string;
+  sources: string;
+  materialTemplates: string[];
+  ruleTemplates: string[];
+  profile: string;
+};
+
+function numbered(items: string[], empty: string) {
+  return items.length > 0 ? items.map((item, i) => `${i + 1}. ${item}`).join('\n') : empty;
+}
+
+function contextBlock(input: DraftContext) {
+  return `[블로그 프로필]
+${input.profile || '없음'}
+
+[수집 자료]
+${input.materials || '없음'}
+
+[확인한 출처]
+${input.sources || '없음'}
+
+[글감 템플릿]
+${numbered(input.materialTemplates, '자유 형식')}
+
+[규칙]
+${numbered(input.ruleTemplates, '제한 없음')}`;
+}
+
+async function askText(prompt: string, maxTokens: number) {
+  const response = await anthropic.messages.create({
+    model: AI_MODEL,
+    max_tokens: maxTokens,
+    messages: [{ role: 'user', content: prompt }],
+  });
+  const textBlock = response.content.find((block: any) => block.type === 'text') as any;
+  const text = textBlock?.text || '';
+  if (!text) throw new Error('AI 응답이 비어 있습니다.');
+  if (response.stop_reason === 'max_tokens') throw new Error(`AI 응답이 길이 제한(${maxTokens} 토큰)에서 잘렸습니다.`);
+  return text;
+}
+
 // 간단한 URL 스크래퍼 (네이버 블로그의 경우 iframe 내부 주소 우회 시도)
-async function extractUrlText(url: string): Promise<string> {
+export async function extractUrlText(url: string): Promise<string> {
   try {
     const res = await fetch(url);
     const html = await res.text();
@@ -150,78 +198,111 @@ ${extraContext}
     }
   },
 
-  // 2. 키워드, 수집함 데이터, 재료 템플릿, 규칙 템플릿을 바탕으로 네이버 블로그 초안 작성 (Direct Generate)
-  async generateDirectDraft(keyword: string, inboxContents: string[], materialTemplates: string[], ruleTemplates: string[]) {
-    // 텍스트 내에 URL이 포함되어 있다면 해당 내용을 추출하여 추가 (수집함 데이터)
-    let enrichedContents = [];
-    for (const content of inboxContents) {
-      const urlRegex = /(https?:\/\/[^\s]+)/g;
-      const urls = content.match(urlRegex) || [];
-      let extraContext = '';
-      for (const url of urls) {
-        const extracted = await extractUrlText(url);
-        extraContext += `\n[웹페이지 내용 참고: ${url}]\n${extracted}\n`;
-      }
-      enrichedContents.push(content + extraContext);
-    }
-
+  // 2-1. OUTLINE 단계: 키워드 · 제목 · 독자 질문형 H2 목차 (AEO)
+  async generateOutline(input: DraftContext & { keyword: string }) {
     const prompt = `
-당신은 최고의 SEO, AEO(Answer Engine Optimization), GEO(Generative Engine Optimization) 전문가이자 네이버 블로그 전문 AI 에디터입니다.
-주어진 [사용자 입력 키워드(선택)], [원시 자료], [글감 템플릿], [규칙]을 종합하여, 검색 엔진과 AI 검색 모두에서 노출되기 가장 좋은 최적의 타겟 키워드를 먼저 도출하고, 이를 바탕으로 완성도 높은 네이버 블로그 글 초안을 작성해주세요.
+당신은 네이버 블로그 기획 에디터입니다. 아래 자료로 쓸 글의 목차만 설계하세요. 본문은 쓰지 않습니다.
 
-[사용자 입력 타겟 키워드]
-${keyword ? keyword : '없음 (AI가 자료를 분석하여 최적의 타겟 키워드를 도출할 것)'}
+[사용자 입력 키워드]
+${input.keyword || '없음 (자료에서 독자가 실제로 검색할 핵심어를 도출)'}
 
-[원시 자료 (글의 재료가 될 내용)]
-${enrichedContents.length > 0 ? enrichedContents.map((m, i) => `${i + 1}. ${m}`).join('\n\n') : '없음'}
+${contextBlock(input)}
 
-[글감 템플릿 (글의 뼈대와 방향성)]
-${materialTemplates.length > 0 ? materialTemplates.map((m, i) => `${i + 1}. ${m}`).join('\n') : '자유 형식'}
+[지침]
+- 핵심어는 독자가 실제로 검색할 말로 하나 정합니다. 검색량·순위는 추정하지 않습니다.
+- 소제목(H2)은 독자의 질문 형태로 3~6개. 각 소제목에 바로 답할 한 문장(answer)을 붙입니다.
+- 자료에 없는 사실이 필요한 소제목은 needsSource를 true로 둡니다.
 
-[규칙 (반드시 지켜야 할 말투나 형식)]
-${ruleTemplates.length > 0 ? ruleTemplates.map((r, i) => `${i + 1}. ${r}`).join('\n') : '제한 없음'}
+아래 형식의 JSON만 <outline> 태그 안에 출력하세요.
+<outline>
+{"keyword": "...", "title": "...", "sections": [{"h2": "...", "answer": "...", "needsSource": false}]}
+</outline>
+`;
+    const text = await askText(prompt, 3000);
+    const match = text.match(/<outline>([\s\S]*?)<\/outline>/);
+    const raw = match ? match[1] : text;
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    let outline: Outline;
+    try {
+      outline = JSON.parse(raw.slice(start, end + 1));
+    } catch {
+      throw new Error(`목차 응답을 JSON으로 읽지 못했습니다: ${raw.trim().slice(0, 120)}`);
+    }
+    if (!outline.title || !Array.isArray(outline.sections) || outline.sections.length === 0) {
+      throw new Error('목차 응답에 제목이나 소제목이 없습니다.');
+    }
+    return outline;
+  },
 
-[작성 지침]
-1. 사용자 입력 키워드가 '없음'이거나 부실하다면, 주어진 원시 자료를 바탕으로 SEO(검색량 대비 경쟁도), AEO(사용자의 명확한 질문에 대한 답변형), GEO(AI 요약 엔진이 선호하는 구조)에 가장 적합한 핵심 키워드(롱테일 키워드 포함)를 스스로 도출하세요.
-2. 도출된 키워드를 활용해 클릭을 유도하는 매력적인 제목을 작성하세요.
-3. 서론-본론-결론 구조를 가지며, 모바일 가독성을 위해 문단을 짧게 나누고 가독성을 높이세요. GEO 최적화를 위해 글 초반에 요약(결론)을 배치하는 것도 좋습니다.
-4. 네이버 블로그 SEO 가산점 및 시각적 가독성을 위해, 본문의 주요 소제목(## 또는 ###) 아래에 해당 내용과 어울리는 이미지가 들어갈 자리 2~3곳에 반드시 '[[IMAGE: 상세한 영문 이미지 묘사, photorealistic, high quality blog]]' 마커를 분산 배치하세요.
-5. 출력은 반드시 아래 XML 태그를 사용하여 구조화된 형태로 작성해주세요.
+  // 2-2. DRAFT 단계: 목차를 따라 본문 작성 (질문 아래 답 먼저, 출처 없는 수치·경험 금지)
+  async generateBody(input: DraftContext & { outline: Outline }) {
+    const prompt = `
+당신은 네이버 블로그 에디터입니다. 확정된 목차를 따라 본문을 Markdown으로 작성하세요.
 
-<keyword>도출한 최적의 타겟 키워드</keyword>
-<title>작성한 블로그 제목</title>
+[제목] ${input.outline.title}
+[핵심어] ${input.outline.keyword}
+[목차]
+${input.outline.sections.map((s, i) => `${i + 1}. ## ${s.h2}\n   먼저 답할 내용: ${s.answer}`).join('\n')}
+
+${contextBlock(input)}
+
+[작성 기준]
+- 도입 2~3문장에 핵심어와 글의 결론을 자연스럽게 넣습니다. 핵심어를 억지로 반복하지 않습니다.
+- 목차의 소제목을 그대로 ## 로 쓰고, 각 소제목 바로 아래 첫 문장에서 답을 먼저 말합니다.
+- 방법은 번호 목록, 비교는 표로 정리합니다. 내용에 맞을 때만 씁니다.
+- 수치·날짜·인용은 [확인한 출처]와 [수집 자료]에 있는 것만 쓰고, 문장 끝에 (출처: 사이트명)을 붙입니다.
+- 자료에 없는 경험담·후기·통계를 지어내지 않습니다. 모르는 내용은 "확인이 필요합니다"라고 씁니다.
+- 모바일에서 읽기 쉽게 문단은 2~3문장으로 씁니다.
+- 이미지 마커나 이미지 링크는 넣지 않습니다.
+- 마지막 문단에 독자가 할 다음 행동을 정리합니다. 프로필에 행동 유도 문구와 URL이 있으면 그대로 씁니다.
+
+본문 Markdown만 <content> 태그 안에 출력하세요. 제목(#)은 쓰지 않습니다.
 <content>
-작성한 블로그 본문 내용 (Markdown 포맷)
+...
 </content>
 `;
+    const text = await askText(prompt, 8000);
+    const match = text.match(/<content>([\s\S]*?)<\/content>/);
+    const content = (match ? match[1] : text).trim();
+    if (content.length < 200) throw new Error('본문 응답이 너무 짧습니다.');
+    return content;
+  },
 
-    const response = await anthropic.messages.create({
-      model: AI_MODEL,
-      max_tokens: 4000,
-      messages: [{ role: 'user', content: prompt }],
-    });
+  // 2-3. POLISH 단계: AI 문체 교정 (humanizer 기준). 의미·수치·출처·확실한 정도는 보존
+  async polishBody(content: string, profile: string) {
+    const prompt = `
+당신은 한국어 교정 편집자입니다. 아래 블로그 본문의 어색한 AI 문체만 고치세요.
 
-    const textBlock = response.content.find((block: any) => block.type === 'text') as any;
-    const resultText = textBlock?.text || '';
+[고칠 것]
+- 번역투, 추상적이고 과장된 표현, 같은 말 반복, 불필요한 서론·결론 문장
+- 예: "효율적인 공간 활용을 도모할 수 있습니다." → "공간을 더 알뜰하게 쓸 수 있습니다."
 
-    // XML 태그 파싱
-    const keywordMatch = resultText.match(/<keyword>([\s\S]*?)<\/keyword>/);
-    const titleMatch = resultText.match(/<title>([\s\S]*?)<\/title>/);
-    const contentMatch = resultText.match(/<content>([\s\S]*?)<\/content>/);
+[지킬 것]
+- 의미, 수치, 날짜, 인용, (출처: ...) 표기, 소제목(##), 표와 목록 구조
+- 추정은 추정으로 남깁니다. 경험·감정·사례를 새로 지어내지 않습니다.
+- 멀쩡한 문장은 바꾸지 않습니다.
 
-    let rawContent = contentMatch ? contentMatch[1].trim() : resultText;
+[블로그 프로필]
+${profile || '없음 (기존 본문의 말투 유지)'}
 
-    // 본문 내 [[IMAGE: ...]] 마커를 Pollinations AI 이미지 URL로 자동 치환
-    const processedContent = rawContent.replace(/\[\[IMAGE:\s*([\s\S]*?)\]\]/g, (_: string, imgDesc: string) => {
-      const cleanDesc = encodeURIComponent(imgDesc.trim().replace(/\n/g, ' '));
-      return `\n\n![일러스트](https://image.pollinations.ai/prompt/${cleanDesc}?width=800&height=400&nologo=true)\n\n`;
-    });
+[본문]
+${content}
 
-    return {
-      keyword: keywordMatch ? keywordMatch[1].trim() : (keyword || '키워드 미상'),
-      title: titleMatch ? titleMatch[1].trim() : `[초안] ${keyword || 'AI 생성 글'}`,
-      content: processedContent
-    };
+출력 형식:
+<content>교정한 전체 본문</content>
+<notes>
+- 수정 전 → 수정 후 (대표 사례 최대 3개)
+</notes>
+`;
+    const text = await askText(prompt, 10000);
+    const contentMatch = text.match(/<content>([\s\S]*?)<\/content>/);
+    const notesMatch = text.match(/<notes>([\s\S]*?)<\/notes>/);
+    const polished = contentMatch ? contentMatch[1].trim() : '';
+    if (polished.length < content.length * 0.6) {
+      throw new Error('교정 결과가 원문보다 지나치게 짧아 적용하지 않았습니다.');
+    }
+    return { content: polished, notes: notesMatch ? notesMatch[1].trim() : '' };
   },
 
   // 3. 기존 블로그 글을 바탕으로 OSMU (인스타, 숏츠, 스레드 등) 콘텐츠 변환
