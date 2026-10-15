@@ -6,7 +6,7 @@
 ## 실행
 - 로컬 전체 실행: `npm start` (루트) → 의존성 설치, `prisma db push`, backend(3001)·frontend(5173) 동시 기동
 - 필수 환경변수: `backend/.env`의 `ANTHROPIC_API_KEY` (나머지는 선택)
-- 선택 환경변수: `ANTHROPIC_MODEL`(기본 `claude-haiku-5-5`), `DATABASE_URL`(postgres면 Postgres, 없으면 SQLite), `CRON_SECRET`, `DISABLE_LOCAL_CRON=1`, `IMAGE_PROVIDER=ideogram` + `IDEOGRAM_API_KEY` (배포 시 `BLOB_READ_WRITE_TOKEN` 필요), `APP_PASSWORD`(설정 시 로그인 필요, 크론은 제외)
+- 선택 환경변수: `ANTHROPIC_MODEL`(기본 `claude-haiku-5-5`), `DATABASE_URL`(postgres면 Postgres, 없으면 SQLite), `CRON_SECRET`, `DISABLE_LOCAL_CRON=1`, `IMAGE_PROVIDER=ideogram` + `IDEOGRAM_API_KEY` (배포 시 `BLOB_READ_WRITE_TOKEN` 필요), `APP_PASSWORD`(운영자 비밀번호. 사용후기 보기·삭제에만 쓴다. 사이트 접속은 누구나 가능)
 
 ## 패키지 관리
 - **항상 `npm` 사용** (package-lock.json). 루트·backend·frontend 세 곳에 각각 package.json이 있다.

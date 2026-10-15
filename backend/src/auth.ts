@@ -1,11 +1,9 @@
 import crypto from 'crypto';
 import type { NextFunction, Request, Response } from 'express';
 
-// 공용 비밀번호 하나로 화면과 API를 막는다. APP_PASSWORD가 없으면(로컬 기본) 잠그지 않는다.
+// 사이트는 누구나 들어온다. APP_PASSWORD는 운영자 전용 기능(사용후기 보기·삭제)에만 쓴다.
 const COOKIE = 'autoblog_session';
 const SESSION_MS = 30 * 24 * 60 * 60_000;
-// 크론은 CRON_SECRET으로 따로 확인한다.
-const PUBLIC_PATHS = ['/api/auth/status', '/api/auth/login', '/api/auth/logout'];
 
 function password() {
   return process.env.APP_PASSWORD || '';
@@ -31,7 +29,8 @@ function readCookie(req: Request) {
 }
 
 function isLoggedIn(req: Request) {
-  if (!password()) return true;
+  // 비밀번호가 없으면 로컬에서만 운영자로 본다. 배포에서 비워두면 아무도 운영자가 아니다.
+  if (!password()) return !process.env.VERCEL;
   const [expires, mac] = readCookie(req).split('.');
   if (!expires || !mac || Number(expires) < Date.now()) return false;
   return safeEqual(mac, sign(expires));
@@ -42,18 +41,20 @@ function setSession(res: Response, value: string, maxAgeSec: number) {
   res.setHeader('Set-Cookie', `${COOKIE}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSec}${secure}`);
 }
 
-export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (PUBLIC_PATHS.includes(req.path) || req.path.startsWith('/api/cron/')) return next();
-  if (!req.path.startsWith('/api/') || isLoggedIn(req)) return next();
-  res.status(401).json({ error: '로그인이 필요합니다.', code: 'AUTH_REQUIRED' });
+export function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (isLoggedIn(req)) return next();
+  res.status(401).json({ error: '운영자 로그인이 필요합니다.', code: 'AUTH_REQUIRED' });
 }
 
 export function authStatus(req: Request, res: Response) {
-  res.json({ required: Boolean(password()), loggedIn: isLoggedIn(req) });
+  res.json({ admin: isLoggedIn(req) });
 }
 
 export async function login(req: Request, res: Response) {
-  if (!password()) return res.json({ ok: true });
+  if (!password()) {
+    if (!process.env.VERCEL) return res.json({ ok: true });
+    return res.status(400).json({ error: '운영자 비밀번호(APP_PASSWORD)가 설정되지 않았습니다.' });
+  }
   if (!safeEqual(String(req.body?.password || ''), password())) {
     // 무차별 대입을 늦춘다.
     await new Promise((resolve) => setTimeout(resolve, 1_000));

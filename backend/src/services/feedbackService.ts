@@ -34,3 +34,7 @@ export async function listFeedback(limit = 50) {
 export async function createFeedback(data: { name: string; rating: number; content: string }) {
   return prisma.feedback.create({ data });
 }
+
+export async function deleteFeedback(id: number) {
+  await prisma.feedback.deleteMany({ where: { id } });
+}

@@ -7,7 +7,6 @@ import { RulesPage } from './pages/RulesPage';
 import { PostsPage } from './pages/PostsPage';
 import { TopicsPage } from './pages/TopicsPage';
 import { ActivityPage } from './pages/ActivityPage';
-import { LoginGate } from './components/LoginGate';
 import { FeedbackBoard } from './components/FeedbackBoard';
 
 function Sidebar() {
@@ -363,7 +362,6 @@ function Dashboard() {
 
 function App() {
   return (
-    <LoginGate>
     <Router>
       <div className="flex h-screen bg-slate-50 overflow-hidden text-slate-900 font-sans">
         <Sidebar />
@@ -380,7 +378,6 @@ function App() {
         </main>
       </div>
     </Router>
-    </LoginGate>
   );
 }
 
