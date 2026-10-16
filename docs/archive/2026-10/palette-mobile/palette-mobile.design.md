@@ -7,7 +7,7 @@
 > **Author**: jeh-lab (with Claude)
 > **Date**: 2026-10-16
 > **Status**: Draft
-> **Planning Doc**: [palette-mobile.plan.md](../../01-plan/features/palette-mobile.plan.md)
+> **Planning Doc**: [palette-mobile.plan.md](./palette-mobile.plan.md)
 
 ---
 

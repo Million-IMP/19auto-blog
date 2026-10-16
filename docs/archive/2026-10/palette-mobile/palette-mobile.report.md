@@ -66,9 +66,9 @@
 
 ## 2. Related Documents
 
-- Plan: [palette-mobile.plan.md](../01-plan/features/palette-mobile.plan.md)
-- Design: [palette-mobile.design.md](../02-design/features/palette-mobile.design.md) (v0.2)
-- Analysis: [palette-mobile.analysis.md](../03-analysis/palette-mobile.analysis.md)
+- Plan: [palette-mobile.plan.md](./palette-mobile.plan.md)
+- Design: [palette-mobile.design.md](./palette-mobile.design.md) (v0.2)
+- Analysis: [palette-mobile.analysis.md](./palette-mobile.analysis.md)
 - 이전 PR: https://github.com/Million-IMP/19auto-blog/pull/16
 
 ---
