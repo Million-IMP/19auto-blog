@@ -1,25 +1,25 @@
 import { useEffect, useState } from 'react';
-import { Moon, Sun, ScrollText } from 'lucide-react';
 import { cn } from '../ui';
-import { applySiteTheme, getSiteTheme, type SiteTheme } from './siteTheme';
-
-const OPTIONS: readonly { value: SiteTheme; label: string; icon: typeof Moon }[] = [
-  { value: 'dark', label: '어두운 화면', icon: Moon },
-  { value: 'light', label: '흰 화면', icon: Sun },
-  { value: 'paper', label: '종이 화면', icon: ScrollText },
-];
+import { applySiteTheme, getSiteTheme, SITE_THEME_EVENT, THEME_OPTIONS, type SiteTheme } from './siteTheme';
 
 // 어두운 / 흰 / 종이 3가지 중 하나를 고르는 버튼 묶음
 export function ThemeSwitcher({ className }: { className?: string }) {
   const [theme, setTheme] = useState<SiteTheme>(getSiteTheme);
 
   useEffect(() => {
-    applySiteTheme(theme);
+    if (theme !== getSiteTheme()) applySiteTheme(theme);
   }, [theme]);
+
+  // 다른 곳(커맨드 팔레트, 다른 스위처)에서 바꾼 색을 따라간다
+  useEffect(() => {
+    const onChange = (e: Event) => setTheme((e as CustomEvent<SiteTheme>).detail);
+    window.addEventListener(SITE_THEME_EVENT, onChange);
+    return () => window.removeEventListener(SITE_THEME_EVENT, onChange);
+  }, []);
 
   return (
     <div role="radiogroup" aria-label="화면 색" className={cn('inline-flex gap-0.5 rounded-control border border-line bg-surface-2 p-0.5', className)}>
-      {OPTIONS.map(({ value, label, icon: Icon }) => (
+      {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
         <button
           key={value}
           type="button"

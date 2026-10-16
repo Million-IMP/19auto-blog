@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
-import { Settings, Play, ChevronDown, ChevronRight } from 'lucide-react';
+import { Settings, Play, ChevronDown, ChevronRight, ArrowRight } from 'lucide-react';
 import { FeedbackBoard } from '../components/FeedbackBoard';
 import { parseRssItem } from '../components/inbox/parseRssItem';
-import { Badge, Button, ButtonLink, Card, CardHeader, CardBody, EmptyState, Field, Notice, Page, PageHeader, Select, StageBadge, Switch, cn } from '../components/ui';
+import { Badge, Button, ButtonLink, Card, CardHeader, CardBody, EmptyState, Field, Notice, Page, Select, StageBadge, Switch, cn } from '../components/ui';
 
 const API_URL = '/api';
 
@@ -51,7 +51,8 @@ function Column({ step, title, count, to, hot, children, more, empty }: {
       <Link to={to} className="group flex items-baseline gap-2 rounded-t-card border-b border-line px-3.5 py-3 hover:bg-surface-2">
         <span className="text-xs font-bold tabular-nums text-ink-3">{step}</span>
         <b className="text-sm font-bold text-ink group-hover:text-accent">{title}</b>
-        <span className={cn('ml-auto text-xl font-extrabold tabular-nums', hot ? 'text-accent' : 'text-ink')}>{count}</span>
+        {hot && <span className="rounded-control bg-accent px-1.5 py-0.5 text-[10px] font-bold text-accent-ink">지금 여기</span>}
+        <span className={cn('ml-auto font-display text-2xl font-black tabular-nums leading-none', hot ? 'text-accent' : 'text-ink')}>{count}</span>
       </Link>
       {empty ?? (
         <div className="grid content-start gap-2 p-2.5">
@@ -77,6 +78,49 @@ function Item({ to, title, meta }: { to: string; title: string; meta: ReactNode 
 // 빈 열: 공통 EmptyState를 열 안에 맞게 작게
 function ColumnEmpty({ text, to, label }: { text: string; to: string; label: string }) {
   return <EmptyState compact className="m-2.5" title={text} action={<ButtonLink to={to} size="sm">{label}</ButtonLink>} />;
+}
+
+const WEEKDAY = new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+
+// 1면 머리: 날짜 줄 + 제호 + 오늘의 헤드라인(지금 가장 먼저 할 일)
+function Masthead({ status, actions, headline }: {
+  status: ReactNode; actions: ReactNode; headline: { text: string; to: string; cta: string };
+}) {
+  const [today] = useState(() => WEEKDAY.format(new Date()));
+  return (
+    <header className="mb-5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line pb-2 text-xs text-ink-3">
+        <span className="font-semibold text-ink-2">{today}</span>
+        {status}
+        <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div>
+      </div>
+      <div className="border-b-2 border-ink py-4">
+        <p className="text-xs font-bold uppercase tracking-[0.3em] text-accent">The Pipeline Daily</p>
+        <h1 className="mt-1 font-display text-4xl font-black tracking-tight text-ink md:text-5xl">AutoBlog 편집국</h1>
+      </div>
+      <Link to={headline.to} className="group flex flex-col gap-1 border-b border-line py-3 sm:flex-row sm:items-baseline sm:gap-4">
+        <span className="shrink-0 text-xs font-bold text-ink-3">오늘의 헤드라인</span>
+        <span className="font-display text-lg font-extrabold leading-snug text-ink group-hover:text-accent md:text-xl">{headline.text}</span>
+        <span className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-accent sm:ml-auto">
+          {headline.cta} <ArrowRight size={14} className="transition group-hover:translate-x-0.5" />
+        </span>
+      </Link>
+    </header>
+  );
+}
+
+// 다섯 열 위에 놓이는 공정선: 글이 쌓인 단계에서 다음 단계로 점선이 흐른다 (넓은 화면에서만)
+function PressLine({ counts, hot }: { counts: number[]; hot: number }) {
+  return (
+    <div aria-hidden className="mb-2 hidden grid-cols-5 gap-3 lg:grid">
+      {counts.map((count, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', i + 1 === hot ? 'pulse-dot bg-accent' : count > 0 ? 'bg-ink' : 'bg-line-strong')} />
+          {i < counts.length - 1 && <div className="flow-line flex-1" data-live={count > 0 ? 'true' : 'false'} />}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function AutoSettings({ auto, setAuto, materials, saving, running, dirty, onSave }: {
@@ -153,6 +197,10 @@ export function DashboardPage() {
     return () => window.clearInterval(timer);
   }, [running]);
 
+  // 명령창의 '지금 한 바퀴'는 /?run=1로 들어온다. 한 번만 실행하고 주소에서 지운다.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const runRequested = useRef(false);
+
   const dirty = Boolean(auto && savedAuto && JSON.stringify(auto) !== JSON.stringify(savedAuto));
 
   // load는 한 번만 만들고, 저장된 설정은 ref로 읽는다 (고치는 중인 설정을 새로고침이 덮어쓰지 않게)
@@ -225,6 +273,13 @@ export function DashboardPage() {
     }
   };
 
+  useEffect(() => {
+    if (searchParams.get('run') !== '1' || runRequested.current) return;
+    runRequested.current = true;
+    setSearchParams({}, { replace: true });
+    if (!running) runAuto();
+  });
+
   const inbox = summary.inbox;
   const writing = summary.blogDrafts.filter((p) => p.stage !== 'READY');
   const ready = summary.blogDrafts.filter((p) => p.stage === 'READY');
@@ -233,25 +288,30 @@ export function DashboardPage() {
 
   // 지금 가장 먼저 손댈 단계: 뒤쪽(발행에 가까운) 단계부터 쌓인 곳
   const hotStep = ready.length > 0 ? 5 : writing.length > 0 ? 4 : topics.length > 0 ? 2 : 1;
+  const inboxCount = stats?.inboxUnprocessed ?? 0;
+  const headline = hotStep === 5
+    ? { text: `발행 대기 ${ready.length}건이 지면을 기다립니다.`, to: '/posts?status=draft&stage=ready', cta: '발행하러 가기' }
+    : hotStep === 4
+      ? { text: `초안 ${writing.length}건이 작성 단계를 지나는 중입니다.`, to: '/posts?status=draft&stage=writing', cta: '진행 보기' }
+      : hotStep === 2
+        ? { text: `평가된 글감 ${topics.length}건 — 오늘 쓸 글을 고르세요.`, to: '/topics', cta: '글감 고르기' }
+        : inboxCount > 0
+          ? { text: `새로 모인 글 ${inboxCount}건이 분류를 기다립니다.`, to: '/inbox', cta: '수집함 열기' }
+          : { text: '오늘은 조용합니다. 글을 모으거나 한 바퀴 돌려 보세요.', to: '/inbox', cta: '수집하러 가기' };
 
   return (
     <Page wide>
-      <PageHeader
-        title={
-          <>
-            파이프라인
-            {savedAuto && (
-              <Badge tone={savedAuto.enabled ? 'accent' : 'neutral'} className="self-center">
-                {savedAuto.enabled ? '자동 작성 켜짐 · 매일 09:00' : '자동 작성 꺼짐'}
-              </Badge>
-            )}
-          </>
-        }
-        description="수집한 글이 글감·재료·규칙을 거쳐 초안과 발행 대기까지 어디쯤 있는지 봅니다. 열 제목을 누르면 그 화면으로 갑니다."
+      <Masthead
+        headline={headline}
+        status={savedAuto && (
+          <Badge tone={savedAuto.enabled ? 'accent' : 'neutral'}>
+            {savedAuto.enabled ? '자동 작성 켜짐 · 매일 09:00' : '자동 작성 꺼짐'}
+          </Badge>
+        )}
         actions={
           <>
-            <Button icon={<Settings size={15} />} onClick={() => setSettingsOpen((v) => !v)}>설정</Button>
-            <Button variant="primary" icon={<Play size={15} />} onClick={runAuto} disabled={running}>{running ? `작성 중... ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}` : '지금 한 바퀴'}</Button>
+            <Button size="sm" icon={<Settings size={14} />} onClick={() => setSettingsOpen((v) => !v)}>설정</Button>
+            <Button size="sm" variant="primary" icon={<Play size={14} />} onClick={runAuto} disabled={running}>{running ? `작성 중... ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}` : '지금 한 바퀴'}</Button>
           </>
         }
       />
@@ -259,7 +319,8 @@ export function DashboardPage() {
       {error && <Notice tone="danger" className="mb-4">{error}</Notice>}
       {autoMsg && <Notice tone="info" className="mb-4">{autoMsg}</Notice>}
 
-      <div className="-mx-gutter grid snap-x snap-mandatory scroll-px-gutter auto-cols-[82%] grid-flow-col gap-3 overflow-x-auto px-gutter pb-2 sm:auto-cols-[45%] md:mx-0 md:scroll-px-0 md:px-0 lg:grid-flow-row lg:grid-cols-5 lg:overflow-visible">
+      <PressLine hot={hotStep} counts={[inboxCount, topics.length, activeMaterials.length + activeRules.length, writing.length, ready.length]} />
+      <div className="stagger -mx-gutter grid snap-x snap-mandatory scroll-px-gutter auto-cols-[82%] grid-flow-col gap-3 overflow-x-auto px-gutter pb-2 sm:auto-cols-[45%] md:mx-0 md:scroll-px-0 md:px-0 lg:grid-flow-row lg:grid-cols-5 lg:overflow-visible">
         <Column step="01" title="수집" count={stats?.inboxUnprocessed ?? '–'} to="/inbox" hot={hotStep === 1} more={(stats?.inboxUnprocessed ?? 0) - inbox.length}
           empty={stats && stats.inboxUnprocessed === 0 ? <ColumnEmpty text="새로 모인 글이 없어요. RSS 채널을 추가하거나 URL을 붙여넣어 보세요." to="/inbox" label="수집함 열기" /> : undefined}>
           {inbox.map((item) => {

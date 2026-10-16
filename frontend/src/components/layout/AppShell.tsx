@@ -1,22 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Inbox, Lightbulb, Archive, BookOpen, FileText, Activity, Menu, X } from 'lucide-react';
+import { Menu, Search, X } from 'lucide-react';
 import { cn } from '../ui';
 import { ThemeSwitcher } from './ThemeSwitcher';
-
-// 글 만드는 순서대로 나열한다. step은 페이지 제목 앞 번호와 같다.
-const NAV = [
-  { to: '/', label: '홈', full: '대시보드', icon: Home },
-  { to: '/inbox', label: '수집', full: '수집함', step: '01', icon: Inbox },
-  { to: '/topics', label: '글감', full: '글감 보드', step: '02', icon: Lightbulb },
-  { to: '/materials', label: '재료', full: '재료 베이스', step: '03', icon: Archive },
-  { to: '/rules', label: '규칙', full: '규칙 (프롬프트)', step: '03', icon: BookOpen },
-  { to: '/posts', label: '초안', full: '초안 · 발행 대기', step: '04', icon: FileText },
-  { to: '/activity', label: '기록', full: '활동 기록', icon: Activity },
-] as const;
+import { CommandPalette } from './CommandPalette';
+import { NAV, PALETTE_SHORTCUT, openCommandPalette } from './nav';
 
 function Logo({ small }: { small?: boolean }) {
-  return <div className={cn('grid place-items-center rounded-card bg-accent font-black text-accent-ink', small ? 'h-8 w-8' : 'h-9 w-9')}>A</div>;
+  return <div className={cn('grid place-items-center rounded-card bg-ink font-display font-black text-canvas', small ? 'h-8 w-8 text-base' : 'h-10 w-10 text-lg')}>A</div>;
 }
 
 // 768px 이상: 왼쪽 아이콘 레일
@@ -46,7 +37,17 @@ function Rail({ pathname }: { pathname: string }) {
           );
         })}
       </nav>
-      <ThemeSwitcher className="mt-auto flex-col" />
+      <button
+        type="button"
+        onClick={openCommandPalette}
+        title={`명령창 (${PALETTE_SHORTCUT})`}
+        aria-label="명령창 열기"
+        className="mt-auto mb-2 flex w-16 flex-col items-center gap-1 rounded-card border border-dashed border-line-strong py-2 text-xs font-semibold text-ink-3 transition hover:border-accent hover:text-accent"
+      >
+        <Search size={16} />
+        <kbd className="font-sans text-[10px]">{PALETTE_SHORTCUT}</kbd>
+      </button>
+      <ThemeSwitcher className="flex-col" />
     </aside>
   );
 }
@@ -92,7 +93,10 @@ function MobileNav({ pathname }: { pathname: string }) {
     <>
       <header className="md:hidden sticky top-0 z-30 flex items-center gap-3 border-b border-line bg-surface px-4 py-2.5">
         <Link to="/" aria-label="AutoBlog 홈" onClick={() => setOpen(false)}><Logo small /></Link>
-        <span className="flex-1 truncate text-sm font-bold text-ink">{current?.full ?? 'AutoBlog'}</span>
+        <span className="flex-1 truncate font-display text-base font-bold text-ink">{current?.full ?? 'AutoBlog'}</span>
+        <button type="button" onClick={openCommandPalette} aria-label="명령창 열기" className="grid h-9 w-9 place-items-center rounded-control border border-line text-ink-2">
+          <Search size={18} />
+        </button>
         <button ref={menuRef} type="button" onClick={() => setOpen(true)} aria-label="메뉴 열기" aria-expanded={open} className="grid h-9 w-9 place-items-center rounded-control border border-line text-ink-2">
           <Menu size={18} />
         </button>
@@ -151,6 +155,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Rail pathname={pathname} />
       <MobileNav pathname={pathname} />
       <main ref={mainRef} className="min-w-0 flex-1 overflow-y-auto">{children}</main>
+      <CommandPalette />
     </div>
   );
 }

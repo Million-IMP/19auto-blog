@@ -9,13 +9,13 @@ export function Page({ children, wide, className }: { children: ReactNode; wide?
 // step: 글 만드는 순서상 몇 번째 화면인지 (사이드바 번호와 같다)
 export function PageHeader({ step, title, description, actions }: { step?: string; title: ReactNode; description?: ReactNode; actions?: ReactNode }) {
   return (
-    <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between mb-section">
+    <header className="mb-section flex flex-col gap-3 border-b-2 border-ink pb-4 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
-        <h1 className="flex items-baseline gap-2 text-xl font-bold tracking-tight text-ink">
-          {step && <span className="text-sm font-bold text-ink-3 tabular-nums">{step}</span>}
+        {step && <p className="mb-1 text-xs font-bold uppercase tracking-[0.2em] text-accent tabular-nums">No. {step}</p>}
+        <h1 className="flex flex-wrap items-baseline gap-x-3 gap-y-1 font-display text-2xl font-extrabold tracking-tight text-ink md:text-3xl">
           {title}
         </h1>
-        {description && <p className="mt-1 text-sm text-ink-2">{description}</p>}
+        {description && <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-2">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </header>
