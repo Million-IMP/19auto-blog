@@ -35,6 +35,7 @@ export function CommandPalette() {
   const [toast, setToast] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
 
   // 단축키와 외부 버튼(openCommandPalette)으로 열기. 열 때마다 입력을 비운다.
@@ -72,6 +73,17 @@ export function CommandPalette() {
     inputRef.current?.focus();
     axios.get<PostLite[]>('/api/posts').then((r) => setPosts(r.data)).catch(() => setPosts([]));
     return () => returnFocus.current?.focus();
+  }, [open]);
+
+  // Design Ref: §1.3 — 휴대폰 화면 키보드가 올라오면 dvh는 그대로라, 키보드를 뺀 높이(visualViewport)로 목록 높이를 정한다
+  useEffect(() => {
+    if (!open) return;
+    const viewport = window.visualViewport;
+    const target: EventTarget = viewport ?? window;
+    const update = () => panelRef.current?.style.setProperty('--palette-vh', `${viewport?.height ?? window.innerHeight}px`);
+    update();
+    target.addEventListener('resize', update);
+    return () => target.removeEventListener('resize', update);
   }, [open]);
 
   useEffect(() => {
@@ -205,9 +217,9 @@ export function CommandPalette() {
         </div>
       )}
       {open && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[12vh]" role="dialog" aria-modal="true" aria-label="명령창">
+        <div className="fixed inset-0 z-50 flex items-start justify-center px-3 pt-3 md:px-4 md:pt-[12vh]" role="dialog" aria-modal="true" aria-label="명령창">
           <button type="button" aria-label="명령창 닫기" tabIndex={-1} onClick={close} className="palette-scrim absolute inset-0 bg-scrim" />
-          <div className="palette-panel relative w-full max-w-xl overflow-hidden rounded-card border border-line-strong bg-surface shadow-pop" onKeyDown={onKeyDown}>
+          <div ref={panelRef} className="palette-panel relative w-full max-w-xl overflow-hidden rounded-card border border-line-strong bg-surface shadow-pop" onKeyDown={onKeyDown}>
             <div className="flex items-center gap-3 border-b border-line px-4">
               <Search size={18} className="shrink-0 text-ink-3" />
               <input
@@ -217,7 +229,7 @@ export function CommandPalette() {
                   setQuery(e.target.value);
                   setActive(0);
                 }}
-                placeholder="이동, 실행, 글 찾기 — 또는 URL·메모를 붙여넣어 수집함에 넣기"
+                placeholder="검색하거나 URL·메모 붙여넣기"
                 role="combobox"
                 aria-expanded="true"
                 aria-controls="palette-list"
@@ -226,7 +238,7 @@ export function CommandPalette() {
               />
               <kbd className="hidden shrink-0 rounded-control border border-line px-1.5 py-0.5 text-xs text-ink-3 sm:block">Esc</kbd>
             </div>
-            <ul ref={listRef} id="palette-list" role="listbox" className="max-h-[50vh] overflow-y-auto p-2">
+            <ul ref={listRef} id="palette-list" role="listbox" className="max-h-[max(120px,calc(var(--palette-vh,100dvh)_-_88px))] overflow-y-auto p-2 md:max-h-[50vh]">
               {commands.length === 0 && <li className="px-3 py-6 text-center text-sm text-ink-3">맞는 항목이 없습니다.</li>}
               {commands.map((cmd, index) => {
                 const showGroup = index === 0 || commands[index - 1].group !== cmd.group;
@@ -254,9 +266,11 @@ export function CommandPalette() {
                 );
               })}
             </ul>
-            <div className="flex items-center gap-4 border-t border-line px-4 py-2 text-xs text-ink-3">
+            {/* 키보드 안내라 휴대폰에서는 숨긴다 */}
+            <div className="hidden items-center gap-4 border-t border-line px-4 py-2 text-xs text-ink-3 md:flex">
               <span>↑↓ 고르기</span>
               <span>Enter 실행</span>
+              <span>URL·메모 붙여넣기 → 수집함</span>
               <span className="ml-auto">{PALETTE_SHORTCUT} 언제든 열기</span>
             </div>
           </div>
