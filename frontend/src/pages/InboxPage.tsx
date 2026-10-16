@@ -6,6 +6,7 @@ import { ArticleReader, type ReaderArticle } from '../components/inbox/ArticleRe
 import { RssChannelModal } from '../components/inbox/RssChannelModal';
 import { parseRssItem } from '../components/inbox/parseRssItem';
 import { useRssChannels } from '../components/inbox/useRssChannels';
+import { Badge, Button, Card, CardHeader, EmptyState, IconButton, Notice, Page, PageHeader, Segmented, StatusBadge, Textarea } from '../components/ui';
 
 const API_URL = '/api';
 
@@ -74,7 +75,7 @@ export function InboxPage() {
       fetchInbox(); // Refresh list after successful processing
 
       const normalized = String(category || '').toUpperCase();
-      const categoryName = normalized === 'MATERIAL' ? '1 재료 베이스' : '2 규칙 (프롬프트)';
+      const categoryName = normalized === 'MATERIAL' ? '재료 베이스' : '규칙 (프롬프트)';
       const targetPath = normalized === 'MATERIAL' ? '/materials' : '/rules';
 
       if (confirm(`🎉 AI 정제가 완료되었습니다!\n\n• 분류: [${categoryName}]\n• 생성된 제목: "${data.title}"\n• 키워드: ${data.keyword || '없음'}\n\n해당 메뉴(${categoryName})로 바로 이동하여 확인하시겠습니까?`)) {
@@ -120,107 +121,92 @@ export function InboxPage() {
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 mb-6 pb-4 border-b border-slate-200">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">0 수집함</h1>
-          <p className="text-sm text-slate-500 mt-1">외부 정보와 떠오르는 아이디어를 자동/수동으로 모아둡니다.</p>
-        </div>
-        <div className="flex gap-2">
-          <button 
-            onClick={() => setShowRssModal(true)}
-            className="bg-white text-slate-700 border border-slate-300 px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-slate-50 transition flex items-center gap-2 shadow-sm"
-          >
-            <Rss size={15} className="text-orange-500" /> RSS 채널 관리 ({rss.rssFeeds.length})
-          </button>
-          <button 
-            onClick={async () => {
-              try {
-                const res = await axios.post(`${API_URL}/inbox/rss`);
-                alert(`활성화된 RSS 채널들에서 ${res.data.addedCount}개의 새 기사를 수집했습니다.`);
-                fetchInbox();
-                fetchLogs();
-              } catch(e) {
-                alert('RSS 수집 중 오류가 발생했습니다.');
-              }
-            }}
-            className="bg-emerald-600 text-white px-3.5 py-1.5 rounded-lg text-sm font-semibold hover:bg-emerald-700 transition flex items-center gap-2 shadow-sm"
-          >
-            <Bot size={16} /> 활성 RSS 즉시 수집
-          </button>
-        </div>
-      </div>
-      
-      {/* 봇 활동 기록 위젯 */}
-      <div className="bg-white border border-slate-200 rounded-lg p-4 mb-6 shadow-sm flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="bg-slate-100 p-2 rounded-md"><Bot size={16} className="text-slate-600" /></div>
-          <div>
-            <h3 className="text-sm font-semibold text-slate-800">자동 수집 봇 상태</h3>
-            {logs.length > 0 ? (
-              <p className="text-xs text-slate-500 mt-1">
-                마지막 실행: {new Date(logs[0].createdAt).toLocaleString()} <span className="mx-2 text-slate-300">|</span> <span className="font-medium text-slate-700">{logs[0].message.split('\n')[0]}</span>
-              </p>
-            ) : (
-              <p className="text-xs text-slate-500 mt-1">아직 기록된 봇 활동이 없습니다.</p>
-            )}
-            <p className="text-[11px] text-slate-400 mt-1">글 초안까지 잇는 자동 작성은 대시보드에서 켜고 끕니다.</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <button onClick={fetchLogs} className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"><RotateCcw size={12}/> 로그 갱신</button>
-          <Link to="/activity" className="text-xs text-slate-600 hover:text-slate-900 font-medium">전체 기록 보기 →</Link>
-        </div>
-      </div>
-      
-      <div className="bg-white border border-slate-200 rounded-lg p-4 mb-6 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-800 mb-3 flex items-center gap-2"><Send size={16} className="text-blue-500"/> 빠른 수집</h3>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <div className="flex gap-2 items-start">
-            <textarea 
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="URL이나 떠오르는 아이디어를 입력 (Enter: 줄바꿈, Ctrl+Enter: 전송)" 
-              rows={2}
-              className="flex-1 p-3 text-sm border border-slate-300 rounded-md focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-slate-50 text-slate-900 resize-y min-h-[44px]"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && e.ctrlKey) handleSubmit(e);
+    <Page>
+      <PageHeader
+        step="01"
+        title="수집함"
+        description="RSS로 자동으로 모인 글과 직접 붙여넣은 URL·아이디어가 쌓입니다. 쓸 만한 글은 글감으로 평가하거나 재료로 정제합니다."
+        actions={
+          <>
+            <Button icon={<Rss size={15} />} onClick={() => setShowRssModal(true)}>
+              RSS 채널 관리 ({rss.rssFeeds.length})
+            </Button>
+            <Button
+              variant="primary"
+              icon={<Bot size={16} />}
+              onClick={async () => {
+                try {
+                  const res = await axios.post(`${API_URL}/inbox/rss`);
+                  alert(`활성화된 RSS 채널들에서 ${res.data.addedCount}개의 새 기사를 수집했습니다.`);
+                  fetchInbox();
+                  fetchLogs();
+                } catch(e) {
+                  alert('RSS 수집 중 오류가 발생했습니다.');
+                }
               }}
-            />
-            <div className="flex flex-col gap-2 shrink-0">
-              <button type="submit" className="bg-blue-600 text-white px-5 py-2 rounded-md text-sm font-semibold hover:bg-blue-700 transition w-full h-[44px] flex items-center justify-center gap-2">
-                저장하기
-              </button>
-              <button type="button" onClick={() => setContent('')} className="text-slate-500 bg-slate-100 hover:bg-slate-200 px-5 py-2 rounded-md text-xs font-semibold transition w-full">
-                지우기
-              </button>
-            </div>
+            >
+              지금 RSS 수집
+            </Button>
+          </>
+        }
+      />
+
+      {/* 봇 활동 한 줄 */}
+      <Card className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5 text-sm text-ink-2">
+        <span className="min-w-0 flex-1">
+          <b className="text-ink">자동 수집</b>{' '}
+          {logs.length > 0
+            ? <>{new Date(logs[0].createdAt).toLocaleString()} · {logs[0].message.split('\n')[0]}</>
+            : '아직 기록된 봇 활동이 없습니다.'}
+          <span className="block text-xs text-ink-3 mt-0.5">초안까지 잇는 자동 작성은 대시보드에서 켜고 끕니다.</span>
+        </span>
+        <button onClick={fetchLogs} className="text-xs text-ink-2 hover:text-ink font-medium flex items-center gap-1"><RotateCcw size={12}/> 갱신</button>
+        <Link to="/activity" className="text-xs text-accent hover:text-accent-strong font-medium">전체 기록 →</Link>
+      </Card>
+
+      <Card className="mb-section">
+        <CardHeader title={<><Send size={15} className="text-accent"/> 빠른 수집</>} description="URL이나 떠오른 아이디어를 붙여넣으세요. Ctrl+Enter로 바로 저장합니다." />
+        <form onSubmit={handleSubmit} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-start">
+          <Textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="https://… 또는 쓰고 싶은 내용"
+            rows={2}
+            className="flex-1 min-h-[44px]"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && e.ctrlKey) handleSubmit(e);
+            }}
+          />
+          <div className="flex gap-2 sm:flex-col">
+            <Button type="submit" variant="primary" className="flex-1 sm:flex-none">저장하기</Button>
+            <Button variant="ghost" size="sm" onClick={() => setContent('')} className="flex-1 sm:flex-none">지우기</Button>
           </div>
         </form>
-      </div>
+      </Card>
 
-      <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
-        <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
-          <h3 className="text-sm font-semibold text-slate-700">{showProcessed ? '처리된 수집 항목' : '대기 중인 수집 항목'} ({visibleItems.length})</h3>
-          <button
-            type="button"
-            onClick={() => setShowProcessed((prev) => !prev)}
-            className={`text-xs font-semibold px-2.5 py-1 rounded-md border transition ${showProcessed ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
-          >
-            {showProcessed ? '대기 항목 보기' : '처리됨 보기'}
-          </button>
-        </div>
+      <Card>
+        <CardHeader
+          title={<>{showProcessed ? '처리된 수집 항목' : '대기 중인 수집 항목'} <span className="text-ink-3 tabular-nums">{visibleItems.length}</span></>}
+          action={
+            <Segmented
+              options={[{ value: 'waiting', label: '대기' }, { value: 'processed', label: '처리됨' }]}
+              value={showProcessed ? 'processed' : 'waiting'}
+              onChange={(v) => setShowProcessed(v === 'processed')}
+            />
+          }
+        />
 
-        {/* 목록 최상단 구분 컬러 라인 */}
-        {visibleItems.length > 0 && (
-          <div className="h-1.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-sky-400 shadow-xs" />
-        )}
-
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-line">
           {listError ? (
-            <p className="text-red-600 text-center py-8 text-sm">{listError}</p>
+            <Notice tone="danger" className="m-4">{listError}</Notice>
           ) : visibleItems.length === 0 ? (
-            <p className="text-slate-500 text-center py-8 text-sm">{showProcessed ? '처리된 항목이 없습니다.' : '처리할 아이템이 없습니다.'}</p>
+            <EmptyState
+              className="m-4"
+              icon={<Rss size={28} />}
+              title={showProcessed ? '처리된 항목이 없습니다.' : '처리할 수집 항목이 없습니다.'}
+              description={showProcessed ? '글감 평가나 AI 정제를 마친 항목이 여기에 모입니다.' : 'RSS 채널을 추가하거나 위 빠른 수집 칸에 URL을 붙여넣어 보세요.'}
+              action={!showProcessed && <Button size="sm" icon={<Rss size={14} />} onClick={() => setShowRssModal(true)}>RSS 채널 추가</Button>}
+            />
           ) : (
             Object.entries(
               visibleItems.reduce((acc: any, item: any) => {
@@ -230,52 +216,34 @@ export function InboxPage() {
                 acc[key].push(item);
                 return acc;
               }, {})
-            ).map(([time, groupItems]: [string, any], groupIdx: number, arr: any[]) => (
-              <div key={time} className="relative">
+            ).map(([time, groupItems]: [string, any]) => (
+              <div key={time} className="[&:last-child>div:last-child>div:last-child]:rounded-b-card">
                 {/* 시간대 헤더 */}
-                <div className="bg-slate-100 px-4 py-2.5 border-y border-slate-200 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse"></span>
-                    <span className="text-xs font-bold text-slate-800 bg-white border border-slate-200 px-2.5 py-0.5 rounded shadow-xs">
-                      🕒 {time} 수집
-                    </span>
-                  </div>
-                  <span className="text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-full">
-                    {groupItems.length}건의 기사
-                  </span>
+                <div className="sticky top-0 z-10 bg-surface-2/95 backdrop-blur px-4 py-2 border-b border-line flex items-center justify-between text-xs">
+                  <span className="font-semibold text-ink-2 tabular-nums">{time} 수집</span>
+                  <span className="text-ink-3">{groupItems.length}건</span>
                 </div>
 
                 {/* 해당 시간대 기사 목록 */}
-                <div className="divide-y divide-slate-200/80">
+                <div className="divide-y divide-line">
                   {groupItems.map((item: any, idx: number) => {
-                    const isOdd = idx % 2 === 1;
                     const parsed = parseRssItem(item.content);
 
                     return (
                       <div 
                         key={item.id} 
-                        className={`p-4.5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 transition-colors group border-l-4 ${
-                          isOdd 
-                            ? 'bg-slate-100/80 border-l-slate-300 hover:bg-blue-50/70 hover:border-l-blue-500' 
-                            : 'bg-white border-l-transparent hover:bg-blue-50/70 hover:border-l-blue-500'
-                        }`}
+                        className="p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 transition-colors group border-l-2 border-l-transparent hover:bg-surface-2 hover:border-l-accent"
                       >
                         <div className="flex-1 min-w-0 flex items-start gap-3">
-                          <span className={`text-[11px] font-mono px-1.5 py-0.5 rounded shrink-0 font-bold ${
-                            isOdd ? 'bg-slate-200/90 text-slate-600' : 'bg-slate-100 text-slate-500'
-                          }`}>
-                            #{idx + 1}
+                          <span className="pt-0.5 text-xs font-mono text-ink-3 tabular-nums shrink-0 w-6 text-right">
+                            {idx + 1}
                           </span>
                           <div className="flex-1 min-w-0">
                             {parsed.isRss ? (
                               <div className="space-y-1">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <span className="inline-block px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold rounded shadow-2xs">
-                                    {parsed.channel}
-                                  </span>
-                                  {item.processed && (
-                                    <span className="inline-block px-2 py-0.5 bg-slate-200 text-slate-700 border border-slate-300 text-[10px] font-bold rounded">처리됨</span>
-                                  )}
+                                  <Badge>{parsed.channel}</Badge>
+                                  {item.processed && <StatusBadge status="PROCESSED" />}
 
                                   {/* 링크 배지 및 고급 리치 프리뷰 팝오버 */}
                                   {parsed.link && (
@@ -283,54 +251,52 @@ export function InboxPage() {
                                       <button
                                         type="button"
                                         onClick={(e) => { e.stopPropagation(); setActiveArticle({ ...item, parsed }); }}
-                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/80 rounded-md text-xs font-semibold transition-all shadow-2xs cursor-pointer group-hover/preview:border-blue-400"
+                                        className="inline-flex items-center gap-1.5 px-2 py-0.5 text-ink-2 hover:text-accent border border-line rounded-control text-xs font-semibold transition-all cursor-pointer group-hover/preview:border-accent/40"
                                       >
                                         {parsed.domain ? (
                                           <img 
                                             src={`https://www.google.com/s2/favicons?domain=${parsed.domain}&sz=32`} 
                                             alt="" 
-                                            className="w-3.5 h-3.5 rounded-xs"
+                                            className="w-3.5 h-3.5 rounded-control"
                                             onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
                                           />
                                         ) : (
-                                          <Globe size={13} className="text-blue-500" />
+                                          <Globe size={13} className="text-accent" />
                                         )}
-                                        <span className="truncate max-w-[180px] sm:max-w-[280px] font-mono">{parsed.domain || parsed.link}</span>
-                                        <span className="text-[10px] text-blue-600 bg-white border border-blue-200 px-1 py-0.2 rounded font-sans font-bold flex items-center gap-0.5">
-                                          <Eye size={10} /> 열람
-                                        </span>
+                                        <span className="truncate max-w-[160px] sm:max-w-[280px] font-mono">{parsed.domain || parsed.link}</span>
+                                        <Eye size={12} />
                                       </button>
                                       
                                       {/* 고급 리치 프리뷰 팝오버 (슬랙/트위터 스타일 카드) */}
-                                      <div className="absolute left-0 bottom-full mb-2.5 hidden group-hover/preview:flex flex-col bg-slate-900/95 backdrop-blur-md text-white text-xs p-3.5 rounded-xl shadow-2xl z-40 min-w-[300px] max-w-[380px] pointer-events-none border border-slate-700/80 animate-in fade-in zoom-in-95 duration-150">
-                                        <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2 mb-2">
+                                      <div className="absolute left-0 bottom-full mb-2.5 hidden group-hover/preview:flex flex-col bg-surface-3 backdrop-blur-md text-ink text-xs p-3.5 rounded-card shadow-pop z-40 min-w-[300px] max-w-[380px] pointer-events-none border border-line animate-in fade-in zoom-in-95 duration-150">
+                                        <div className="flex items-center justify-between gap-2 border-b border-line pb-2 mb-2">
                                           <div className="flex items-center gap-1.5 min-w-0">
                                             {parsed.domain && (
                                               <img 
                                                 src={`https://www.google.com/s2/favicons?domain=${parsed.domain}&sz=32`} 
                                                 alt="" 
-                                                className="w-4 h-4 rounded-xs shrink-0" 
+                                                className="w-4 h-4 rounded-control shrink-0" 
                                               />
                                             )}
-                                            <span className="text-[11px] font-bold text-slate-300 truncate">{parsed.domain || '원문 출처'}</span>
+                                            <span className="text-xs font-bold text-ink-3 truncate">{parsed.domain || '원문 출처'}</span>
                                           </div>
-                                          <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-950/80 border border-emerald-800/60 px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0">
+                                          <span className="text-xs font-semibold text-published bg-published/10 border border-published/40 px-1.5 py-0.5 rounded-control flex items-center gap-1 shrink-0">
                                             <Clock size={10} /> 약 {parsed.readingTime}분 분량
                                           </span>
                                         </div>
 
-                                        <p className="font-bold text-slate-100 text-[12px] line-clamp-1 mb-1">
+                                        <p className="font-bold text-ink text-xs line-clamp-1 mb-1">
                                           {parsed.title}
                                         </p>
-                                        <p className="text-slate-400 text-[11px] line-clamp-2 leading-relaxed">
+                                        <p className="text-ink-3 text-xs line-clamp-2 leading-relaxed">
                                           {parsed.snippet}
                                         </p>
 
-                                        <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
-                                          <span className="text-blue-400 font-medium flex items-center gap-1">
-                                            <Sparkles size={11} className="text-blue-400 animate-pulse" /> 클릭 시 스마트 리더로 전체 열람
+                                        <div className="mt-2.5 pt-2 border-t border-line flex items-center justify-between text-xs text-ink-3">
+                                          <span className="text-accent font-medium flex items-center gap-1">
+                                            <Sparkles size={11} className="text-accent animate-pulse" /> 클릭 시 스마트 리더로 전체 열람
                                           </span>
-                                          <span className="font-mono text-slate-500">ESC 닫기</span>
+                                          <span className="font-mono text-ink-3">ESC 닫기</span>
                                         </div>
                                       </div>
                                     </div>
@@ -340,17 +306,17 @@ export function InboxPage() {
                                 {/* 기사 제목 (클릭 시 화면 내 에디토리얼 리더 열림) */}
                                 <h4 
                                   onClick={() => setActiveArticle({ ...item, parsed })}
-                                  className="text-sm font-bold text-slate-900 hover:text-blue-600 transition cursor-pointer flex items-center gap-1.5 pt-0.5"
+                                  className="text-sm font-bold text-ink hover:text-accent transition cursor-pointer flex items-center gap-1.5 pt-0.5"
                                   title="클릭하여 스마트 리더로 전체 기사 보기"
                                 >
                                   {parsed.title}
-                                  <Eye size={13} className="text-slate-400 opacity-0 group-hover:opacity-100 transition shrink-0" />
+                                  <Eye size={13} className="text-ink-3 opacity-0 group-hover:opacity-100 transition shrink-0" />
                                 </h4>
 
                                 {/* 기사 요약 미리보기 */}
                                 <p 
                                   onClick={() => setActiveArticle({ ...item, parsed })}
-                                  className="text-slate-600 text-xs leading-relaxed line-clamp-2 cursor-pointer hover:text-slate-800 transition"
+                                  className="text-ink-2 text-xs leading-relaxed line-clamp-2 cursor-pointer hover:text-ink transition"
                                   title="클릭하여 스마트 리더로 전체 기사 보기"
                                 >
                                   {parsed.snippet}
@@ -358,12 +324,10 @@ export function InboxPage() {
                               </div>
                             ) : (
                               <div>
-                                {item.processed && (
-                                  <span className="inline-block mb-1 px-2 py-0.5 bg-slate-200 text-slate-700 border border-slate-300 text-[10px] font-bold rounded">처리됨</span>
-                                )}
+                                {item.processed && <StatusBadge status="PROCESSED" className="mb-1" />}
                                 <p
                                   onClick={() => setActiveArticle({ ...item, parsed })}
-                                  className="text-slate-800 text-sm whitespace-pre-wrap leading-relaxed cursor-pointer hover:text-blue-600 transition"
+                                  className="text-ink text-sm whitespace-pre-wrap leading-relaxed cursor-pointer hover:text-accent transition"
                                   title="클릭하여 전체 보기"
                                 >
                                   {item.content}
@@ -371,70 +335,50 @@ export function InboxPage() {
                               </div>
                             )}
                             {item.autoError && !item.processed && (
-                              <p className="mt-2 text-[11px] leading-relaxed text-red-600">자동 작성 실패: {item.autoError}</p>
+                              <p className="mt-2 text-xs leading-relaxed text-danger">자동 작성 실패: {item.autoError}</p>
                             )}
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0 self-end md:self-center opacity-100 sm:opacity-90 sm:group-hover:opacity-100 transition-opacity">
+                        <div className="flex flex-wrap items-center gap-1.5 shrink-0 self-end md:self-center">
                           {!item.processed && item.autoError && (
-                            <button
-                              onClick={() => handleRetryAuto(item.id)}
-                              className="bg-white text-slate-700 border border-slate-300 px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-slate-50"
-                            >
-                              다시 자동 시도
-                            </button>
+                            <Button size="sm" onClick={() => handleRetryAuto(item.id)}>다시 자동 시도</Button>
                           )}
                           {!item.processed && (
-                            <button
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              icon={<Lightbulb size={14} />}
                               onClick={() => handleEvaluateTopic(item.id)}
                               disabled={loadingId === item.id}
-                              className="bg-white text-amber-700 border border-amber-200 px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-amber-50 flex items-center gap-1.5 transition disabled:opacity-50"
                               title="독자 질문·의도·빈틈·다음 행동으로 평가해 글감 보드에 올립니다"
                             >
-                              <Lightbulb size={14} /> 글감 평가
-                            </button>
+                              글감 평가
+                            </Button>
                           )}
                           {!item.processed && (
-                            <button
-                              onClick={() => handleProcess(item.id)}
-                              disabled={loadingId === item.id}
-                              className="bg-white text-blue-600 border border-blue-200 px-3.5 py-1.5 rounded-md text-xs font-semibold hover:bg-blue-600 hover:text-white hover:border-blue-600 shadow-2xs flex items-center gap-1.5 transition disabled:opacity-50"
-                            >
-                              {loadingId === item.id ? <span className="animate-pulse">처리 중...</span> : <><Bot size={14} /> AI 정제 (재료화)</>}
-                            </button>
+                            <Button size="sm" icon={<Bot size={14} />} onClick={() => handleProcess(item.id)} disabled={loadingId === item.id}>
+                              {loadingId === item.id ? '처리 중...' : '재료로 정제'}
+                            </Button>
                           )}
-                          <button 
-                            onClick={() => handleDelete(item.id)}
-                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition"
-                            title="삭제"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          <IconButton title="삭제" onClick={() => handleDelete(item.id)} variant="ghostDanger">
+                            <Trash2 size={15} />
+                          </IconButton>
                         </div>
                       </div>
                     );
                   })}
                 </div>
 
-                {/* 시간별 그룹 마지막 칸 사이의 구분 컬러 라인 */}
-                {groupIdx < arr.length - 1 && (
-                  <div className="h-1.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-sky-400 shadow-xs" />
-                )}
               </div>
             ))
           )}
         </div>
-
-        {/* 목록 최하단 구분 컬러 라인 */}
-        {visibleItems.length > 0 && (
-          <div className="h-1.5 bg-gradient-to-r from-blue-500 via-indigo-500 to-sky-400 shadow-xs" />
-        )}
-      </div>
+      </Card>
 
       <ArticleReader article={activeArticle} onClose={closeReader} onProcess={handleProcess} />
 
       {showRssModal && <RssChannelModal channels={rss} onClose={() => setShowRssModal(false)} />}
-    </div>
+    </Page>
   );
 }

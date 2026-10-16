@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import axios from 'axios';
-import { Trash2, PenTool, Link as LinkIcon, Wand2 } from 'lucide-react';
+import { Trash2, PenTool, Link as LinkIcon, Wand2, Archive } from 'lucide-react';
+import { Button, Card, CardBody, CardHeader, EmptyState, Field, IconButton, Input, Notice, Page, PageHeader, Switch, Textarea, cn } from '../components/ui';
 
 const MAX_BENCHMARK_URLS = 5;
 
@@ -52,7 +53,7 @@ export function MaterialsPage() {
       const failed: string[] = res.data.failed || [];
       const summary = res.data.analyzed > 1 ? `${res.data.analyzed}개 글을 비교 분석했습니다.` : '구조 추출이 완료되었습니다.';
       const failedNote = failed.length > 0 ? `\n\n읽지 못해 제외한 URL:\n${failed.join('\n')}` : '';
-      alert(`${summary} 내용을 확인하고 '저장하기'를 눌러 저장하세요.${failedNote}`);
+      alert(`${summary} 내용을 확인하고 '재료 저장'을 눌러 저장하세요.${failedNote}`);
       setExtractUrl('');
     } catch (e: any) {
       alert(e.response?.data?.error || "구조 추출 중 오류가 발생했습니다.");
@@ -117,143 +118,107 @@ export function MaterialsPage() {
   };
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex justify-between items-end mb-6 pb-4 border-b border-slate-200">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">1 재료 베이스 (글감 구조)</h1>
-          <p className="text-sm text-slate-500 mt-1">블로그 글 작성 시 기본 뼈대가 될 '목차'나 '글의 흐름(템플릿)'을 관리합니다.</p>
-        </div>
-      </div>
-      
-      <div className="bg-white border border-slate-200 rounded-lg p-5 mb-6 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2"><PenTool size={16} className="text-emerald-500"/> 새 글감 템플릿 등록</h3>
-        
-        {/* 벤치마킹 URL 추출부 */}
-        <div className="mb-4 p-4 bg-emerald-50 rounded-md border border-emerald-100 flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-emerald-800 font-semibold text-sm">
-              <LinkIcon size={16} /> URL로 구조 벤치마킹
-              <span className="font-normal text-emerald-700 text-xs">여러 개를 넣으면 공통 패턴과 차별화 기회까지 비교합니다</span>
+    <Page>
+      <PageHeader
+        step="03"
+        title="재료 베이스"
+        description="초안의 뼈대가 될 목차·글 흐름(템플릿)을 모아 둡니다. '기본 적용'을 켠 재료는 초안을 만들 때 자동으로 들어갑니다."
+      />
+
+      <Card className="mb-section">
+        <CardHeader title={<><PenTool size={15} className="text-accent" /> 새 재료 등록</>} description="잘 쓴 글의 URL로 구조를 뽑거나, 직접 적어서 저장합니다." />
+        <CardBody className="space-y-4">
+          {/* 벤치마킹 URL 추출부 */}
+          <div className="rounded-control border border-line bg-surface-2 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="flex items-center gap-2 text-sm font-semibold text-ink">
+                <LinkIcon size={15} className="text-accent" /> URL로 구조 벤치마킹
+              </p>
+              <span className={cn('text-xs font-semibold tabular-nums', tooManyUrls ? 'text-danger' : 'text-ink-3')}>
+                {extractUrls.length}/{MAX_BENCHMARK_URLS}개
+              </span>
             </div>
-            <span className={`text-xs font-semibold shrink-0 ${tooManyUrls ? 'text-red-600' : 'text-emerald-700'}`}>
-              {extractUrls.length}/{MAX_BENCHMARK_URLS}개
-            </span>
+            <p className="text-xs text-ink-3">여러 개를 넣으면 공통 패턴과 차별화 기회까지 비교합니다.</p>
+            <div className="flex flex-col gap-2 md:flex-row">
+              <Textarea
+                value={extractUrl}
+                onChange={(e) => setExtractUrl(e.target.value)}
+                placeholder={'URL을 한 줄에 하나씩 (최대 5개)\nhttps://blog.naver.com/...\nhttps://...'}
+                rows={3}
+                className="flex-1"
+              />
+              <Button variant="primary" icon={<Wand2 size={14} />} onClick={handleExtract} disabled={isExtracting || tooManyUrls} className="md:self-start">
+                {isExtracting ? '분석 중...' : extractUrls.length > 1 ? `${extractUrls.length}개 비교 분석` : 'AI 뼈대 추출'}
+              </Button>
+            </div>
           </div>
-          <div className="flex flex-col md:flex-row gap-2 w-full">
-            <textarea
-              value={extractUrl}
-              onChange={(e) => setExtractUrl(e.target.value)}
-              placeholder={'참고하고 싶은 잘 쓰인 블로그 글의 URL을 한 줄에 하나씩 붙여넣으세요 (최대 5개)\nhttps://blog.naver.com/...\nhttps://...'}
-              rows={3}
-              className="flex-1 p-2 text-sm border border-emerald-200 rounded-md focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white resize-y"
-            />
-            <button
-              type="button"
-              onClick={handleExtract}
-              disabled={isExtracting || tooManyUrls}
-              className="bg-emerald-600 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-emerald-700 transition shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50 shrink-0 md:self-start"
-            >
-              {isExtracting
-                ? <span className="animate-pulse">분석 중...</span>
-                : <><Wand2 size={14} /> {extractUrls.length > 1 ? `${extractUrls.length}개 비교 분석` : 'AI 뼈대 추출'}</>}
-            </button>
-          </div>
-        </div>
 
-        <form onSubmit={handleAdd} className="flex flex-col gap-3">
-          <input 
-            type="text" 
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="템플릿 이름 (예: IT 제품 리뷰 기본 구조)"
-            className="w-full p-2.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-slate-50 font-semibold"
-          />
-          <textarea 
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="템플릿 내용 (예: 1. 첫인상 및 스펙 요약 2. 실사용 장점 3가지 3. 아쉬운 점 1가지 4. 구매를 추천하는 대상과 총평)"
-            rows={4}
-            className="w-full p-2.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-slate-50 resize-y"
-          />
-          <button type="submit" className="self-end bg-slate-800 text-white px-6 py-2.5 rounded-md text-sm font-semibold hover:bg-slate-900 transition shadow-sm">
-            직접 작성 / 추출된 템플릿 저장하기
-          </button>
-        </form>
-      </div>
+          <form onSubmit={handleAdd} className="flex flex-col gap-3">
+            <Field label="재료 이름">
+              <Input id="material-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="예: IT 제품 리뷰 기본 구조" />
+            </Field>
+            <Field label="재료 내용">
+              <Textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="예: 1. 첫인상 및 스펙 요약 2. 실사용 장점 3가지 3. 아쉬운 점 1가지 4. 구매를 추천하는 대상과 총평"
+                rows={4}
+              />
+            </Field>
+            <Button type="submit" className="self-end" disabled={!content.trim()}>재료 저장</Button>
+          </form>
+        </CardBody>
+      </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {loadError && (
-          <div className="col-span-full py-8 text-center bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{loadError}</div>
-        )}
-        {!loadError && !viewReady && (
-          <div className="col-span-full py-12 text-center text-slate-400 text-sm">불러오는 중...</div>
-        )}
-        {!loadError && viewReady && items.length === 0 && (
-          <div className="col-span-full py-12 text-center bg-white border border-dashed border-slate-300 rounded-lg text-slate-500 text-sm">
-            <>등록된 재료 템플릿이 없습니다.<br/>위에서 자주 쓰는 글의 구조를 등록해보세요!</>
-          </div>
-        )}
-        {viewReady && items.map(item => {
+      {loadError && <Notice tone="danger" className="mb-4">{loadError}</Notice>}
+      {!loadError && !viewReady && <p className="py-12 text-center text-sm text-ink-3">불러오는 중...</p>}
+      {!loadError && viewReady && items.length === 0 && (
+        <EmptyState
+          icon={<Archive size={28} />}
+          title="등록된 재료가 없습니다."
+          description="자주 쓰는 글의 구조를 위에서 등록해 보세요. 재료가 없으면 기본 글쓰기로 초안을 만듭니다."
+          action={<Button size="sm" onClick={() => document.getElementById('material-title')?.focus()}>재료 등록하기</Button>}
+        />
+      )}
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {viewReady && items.map((item) => {
           const editing = editingId === item.id;
           return (
-          <div key={item.id} className={`bg-white p-5 rounded-lg shadow-sm border transition flex flex-col min-h-[140px] ${item.isActive ? 'border-orange-300 ring-1 ring-orange-300' : 'border-slate-200'}`}>
-            <div className="flex-1">
-              {editing ? (
-                <div className="flex flex-col gap-2">
-                  <input
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    className="w-full p-2 text-sm border border-emerald-300 rounded-md font-semibold"
-                    aria-label="재료 이름"
-                  />
-                  <textarea
-                    value={editContent}
-                    onChange={(e) => setEditContent(e.target.value)}
-                    rows={5}
-                    className="w-full p-2 text-sm border border-emerald-300 rounded-md resize-y"
-                    aria-label="재료 내용"
-                  />
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                    <h3 className="text-sm font-bold text-slate-800">{item.title || "글감 템플릿"}</h3>
-                  </div>
-                  <p className={`text-sm leading-relaxed whitespace-pre-wrap ${item.isActive ? 'text-slate-700' : 'text-slate-500'}`}>{item.content}</p>
-                </>
-              )}
-            </div>
-            <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center gap-2">
-              <label className="flex items-center gap-2 cursor-pointer group">
-                <div className={`w-10 h-5 rounded-full p-1 flex items-center transition-colors duration-200 ease-in-out ${item.isActive ? 'bg-orange-500' : 'bg-slate-300'}`}>
-                  <div className={`bg-white w-3 h-3 rounded-full shadow-md transform transition-transform duration-200 ease-in-out ${item.isActive ? 'translate-x-5' : 'translate-x-0'}`}></div>
-                </div>
-                <input type="checkbox" className="hidden" checked={!!item.isActive} onChange={() => handleToggleActive(item.id)} />
-                <span className={`text-xs font-semibold ${item.isActive ? 'text-orange-600' : 'text-slate-400 group-hover:text-slate-600'}`}>
-                  {item.isActive ? '발행 대기열 기본 적용 중' : '기본 적용 안함'}
-                </span>
-              </label>
-              <div className="flex gap-2">
+            <article key={item.id} className={cn('flex min-h-[140px] flex-col rounded-card border bg-surface p-4 shadow-card', item.isActive ? 'border-accent/50' : 'border-line')}>
+              <div className="flex-1">
                 {editing ? (
-                  <>
-                    <button type="button" onClick={handleSaveEdit} className="text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1.5 rounded-md">저장</button>
-                    <button type="button" onClick={() => setEditingId(null)} className="text-xs font-semibold text-slate-600 bg-white px-2.5 py-1.5 rounded-md border border-slate-300">취소</button>
-                  </>
+                  <div className="flex flex-col gap-2">
+                    <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} aria-label="재료 이름" />
+                    <Textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} rows={5} aria-label="재료 내용" />
+                  </div>
                 ) : (
                   <>
-                    <button type="button" onClick={() => startEdit(item)} className="text-xs font-semibold text-slate-700 bg-white hover:bg-emerald-50 px-2.5 py-1.5 rounded-md border border-slate-300">수정</button>
-                    <button type="button" onClick={() => handleDelete(item.id)} className="text-xs font-semibold text-red-600 bg-white hover:bg-red-50 px-2.5 py-1.5 rounded-md border border-red-200 inline-flex items-center gap-1">
-                      <Trash2 size={14} /> 삭제
-                    </button>
+                    <h3 className="mb-2 text-sm font-bold text-ink">{item.title || '글감 템플릿'}</h3>
+                    <p className={cn('whitespace-pre-wrap text-sm leading-relaxed', item.isActive ? 'text-ink-2' : 'text-ink-3')}>{item.content}</p>
                   </>
                 )}
               </div>
-            </div>
-          </div>
+              <div className="mt-4 flex items-center justify-between gap-2 border-t border-line pt-3">
+                <Switch checked={!!item.isActive} onChange={() => handleToggleActive(item.id)} label={item.isActive ? '기본 적용 중' : '기본 적용 안 함'} />
+                <div className="flex gap-1.5">
+                  {editing ? (
+                    <>
+                      <Button size="sm" variant="primary" onClick={handleSaveEdit}>저장</Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>취소</Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button size="sm" onClick={() => startEdit(item)}>수정</Button>
+                      <IconButton title="삭제" onClick={() => handleDelete(item.id)} variant="ghostDanger"><Trash2 size={15} /></IconButton>
+                    </>
+                  )}
+                </div>
+              </div>
+            </article>
           );
         })}
       </div>
-    </div>
+    </Page>
   );
 }

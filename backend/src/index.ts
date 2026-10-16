@@ -60,6 +60,28 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
+// 대시보드 보드용 요약: 최근 수집 3건 + 블로그 초안 목록(본문 제외). 목록 전체를 받지 않게 한다.
+app.get('/api/dashboard', async (req, res) => {
+  try {
+    const [inbox, blogDrafts] = await Promise.all([
+      prisma.inbox.findMany({
+        where: { processed: false },
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+        select: { id: true, content: true, createdAt: true },
+      }),
+      prisma.post.findMany({
+        where: { status: 'DRAFT', platform: 'NAVER_BLOG' },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, title: true, stage: true, stageError: true, createdAt: true },
+      }),
+    ]);
+    res.json({ inbox, blogDrafts });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/inbox', async (req, res) => {
   const items = await prisma.inbox.findMany({ orderBy: { createdAt: 'desc' } });
   res.json(items);

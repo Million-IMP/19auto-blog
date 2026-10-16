@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>시안 B · Warm Editorial</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f6f1ea; --surface: #fffdf9; --line: #e7ded2; --ink: #2a2420; --ink-2: #5e554d; --ink-3: #9a8f84;
+    --accent: #c2522d; --accent-soft: #f8e6dc; --side: #2a2420;
+    --draft: #9a6a00; --draft-bg: #f6ebcf; --pub: #3f6b3a; --pub-bg: #e3eedc;
+    --r: 14px; --shadow: 0 1px 0 rgba(42,36,32,.04), 0 4px 16px rgba(42,36,32,.05);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: "Pretendard Variable", system-ui, sans-serif; background: var(--bg); color: var(--ink); font-size: 15px; }
+  .serif { font-family: "Noto Serif KR", serif; }
+  .app { display: flex; min-height: 100vh; }
+  aside { width: 220px; background: var(--side); color: #d9cfc4; padding: 24px 14px; display: flex; flex-direction: column; gap: 2px; }
+  .logo { font-family: "Noto Serif KR", serif; font-weight: 800; font-size: 19px; color: #fff; padding: 0 10px 24px; }
+  .logo span { color: #f0a080; }
+  .navlabel { font-size: 12px; color: #8d8177; padding: 16px 10px 6px; }
+  .nav { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 10px; color: inherit; text-decoration: none; }
+  .nav.on { background: #3d3530; color: #fff; }
+  .nav .c { margin-left: auto; font-size: 12px; color: #8d8177; }
+  main { flex: 1; padding: 40px 44px; max-width: 1120px; }
+  .eyebrow { font-size: 13px; color: var(--accent); font-weight: 700; letter-spacing: .02em; }
+  h1 { font-family: "Noto Serif KR", serif; font-size: 30px; font-weight: 800; margin-top: 6px; letter-spacing: -.02em; }
+  .sub { color: var(--ink-2); margin-top: 8px; }
+  .head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 32px; }
+  .btn { border: 1px solid var(--line); background: var(--surface); padding: 10px 16px; border-radius: 999px; font: inherit; font-weight: 600; cursor: pointer; color: var(--ink); }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); }
+  .flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; position: relative; padding: 28px 12px 24px; }
+  .flow::before { content: ""; position: absolute; left: 10%; right: 10%; top: 47px; height: 2px; background: var(--line); }
+  .st { text-align: center; position: relative; padding: 0 8px; }
+  .dot { width: 40px; height: 40px; border-radius: 50%; margin: 0 auto; background: var(--surface); border: 2px solid var(--line); display: grid; place-items: center; font-weight: 700; color: var(--ink-3); position: relative; }
+  .st.done .dot { border-color: var(--accent); color: var(--accent); }
+  .st.now .dot { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 0 0 6px var(--accent-soft); }
+  .st .k { margin-top: 12px; font-weight: 700; }
+  .st .v { font-family: "Noto Serif KR", serif; font-size: 26px; font-weight: 800; margin-top: 4px; }
+  .st .d { font-size: 13px; color: var(--ink-3); }
+  .cols { display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px; margin-top: 20px; }
+  .card h2 { font-family: "Noto Serif KR", serif; font-size: 18px; font-weight: 800; padding: 20px 22px 8px; }
+  .item { padding: 14px 22px; border-top: 1px dashed var(--line); }
+  .item:first-of-type { border-top: 0; }
+  .item .t { font-weight: 600; line-height: 1.45; }
+  .item .m { font-size: 13px; color: var(--ink-3); margin-top: 6px; display: flex; gap: 8px; align-items: center; }
+  .badge { font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
+  .badge.draft { background: var(--draft-bg); color: var(--draft); }
+  .badge.pub { background: var(--pub-bg); color: var(--pub); }
+  .note { padding: 6px 22px 22px; color: var(--ink-2); line-height: 1.65; }
+  .note b { color: var(--ink); }
+  .note .btn { margin-top: 14px; }
+  .callout { margin-top: 20px; padding: 20px 22px; background: var(--accent-soft); border-color: transparent; display: flex; gap: 16px; align-items: center; }
+  .callout p { flex: 1; line-height: 1.6; }
+  .topbar { display: none; }
+  @media (max-width: 767px) {
+    aside { display: none; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; background: var(--side); color: #fff; position: sticky; top: 0; }
+    .topbar .logo { padding: 0; font-size: 17px; }
+    .topbar .btn { background: transparent; color: #fff; border-color: #5e554d; }
+    .app { flex-direction: column; }
+    main { padding: 24px 16px; }
+    h1 { font-size: 24px; }
+    .head { flex-direction: column; align-items: stretch; }
+    .flow { grid-template-columns: 1fr; padding: 16px; gap: 14px; }
+    .flow::before { left: 35px; right: auto; top: 30px; bottom: 30px; width: 2px; height: auto; }
+    .st { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; text-align: left; padding: 0; }
+    .st .dot { margin: 0; }
+    .st .k { margin: 0; } .st .d { grid-column: 2; grid-row: 2; margin-top: -10px; }
+    .st .v { grid-column: 3; grid-row: 1 / span 2; font-size: 22px; margin: 0; }
+    .cols { grid-template-columns: 1fr; }
+    .callout { flex-direction: column; align-items: stretch; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar"><div class="logo">Auto<span>Blog</span></div><button class="btn">메뉴</button></div>
+<div class="app">
+  <aside>
+    <div class="logo">Auto<span>Blog</span></div>
+    <a class="nav on" href="#">오늘의 작업대</a>
+    <div class="navlabel">한 편이 만들어지는 길</div>
+    <a class="nav" href="#">① 수집함<span class="c">178</span></a>
+    <a class="nav" href="#">② 글감 보드<span class="c">5</span></a>
+    <a class="nav" href="#">③ 재료 · 규칙<span class="c">4</span></a>
+    <a class="nav" href="#">④ 초안 · 발행 대기<span class="c">27</span></a>
+    <div class="navlabel">돌아보기</div>
+    <a class="nav" href="#">활동 기록</a>
+  </aside>
+  <main>
+    <div class="head">
+      <div><p class="eyebrow">10월 16일 목요일</p><h1>오늘의 작업대</h1><p class="sub">모은 글이 어떤 길을 지나 한 편의 블로그 글이 되는지 한눈에 봅니다.</p></div>
+      <button class="btn primary">지금 한 바퀴 돌리기</button>
+    </div>
+
+    <div class="card flow">
+      <div class="st done"><div class="dot">1</div><div class="k">수집</div><div class="v">178</div><div class="d">분류 전</div></div>
+      <div class="st now"><div class="dot">2</div><div class="k">글감</div><div class="v">5</div><div class="d">평가 대기</div></div>
+      <div class="st"><div class="dot">3</div><div class="k">재료 · 규칙</div><div class="v">4</div><div class="d">활성</div></div>
+      <div class="st"><div class="dot">4</div><div class="k">초안</div><div class="v">27</div><div class="d">발행 전</div></div>
+      <div class="st"><div class="dot">5</div><div class="k">발행 대기</div><div class="v">0</div><div class="d">URL 기록</div></div>
+    </div>
+
+    <div class="card callout">
+      <p><b>지금 할 일 →</b> 글감 보드에 평가를 기다리는 후보가 5건 있어요. 쓸 만한 것을 골라 초안으로 넘겨 보세요.</p>
+      <button class="btn">글감 보드 열기</button>
+    </div>
+
+    <div class="cols">
+      <div class="card">
+        <h2>최근 초안</h2>
+        <div class="item"><div class="t">책을 찍으면 한글(HWPX) 문서로 바꿔주는 앱이 있을까요?</div><div class="m"><span class="badge draft">초안</span>오늘 01:27 · 이미지 단계</div></div>
+        <div class="item"><div class="t">Apple Keynote UI에 광고가 표시된다는데, 무엇이 바뀌었을까요?</div><div class="m"><span class="badge draft">초안</span>오늘 00:49</div></div>
+        <div class="item"><div class="t">Anthropic 새 버전 관리 시스템 정리</div><div class="m"><span class="badge pub">발행</span>어제</div></div>
+      </div>
+      <div class="card">
+        <h2>자동 작성</h2>
+        <p class="note">매일 <b>오전 9시</b>에 새 글을 모아 최신 <b>3건</b>을 네이버 블로그 초안으로 만듭니다. 지금은 <b>켜져 있어요.</b> 마지막 실행은 오늘 01:27, 초안 1건이었습니다.<br><button class="btn">설정 바꾸기</button></p>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

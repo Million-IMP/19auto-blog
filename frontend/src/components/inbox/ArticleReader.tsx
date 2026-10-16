@@ -19,7 +19,7 @@ const [scrapedData, setScrapedData] = useState<any | null>(null);
 const [isScraping, setIsScraping] = useState(false);
 const [aiSummary, setAiSummary] = useState<{ bullets: string[]; takeaway: string; keywords: string[] } | null>(null);
 const [isSummarizing, setIsSummarizing] = useState(false);
-const [readerTheme, setReaderTheme] = useState<'light' | 'paper' | 'dark'>('light');
+const [readerTheme, setReaderTheme] = useState<'light' | 'paper' | 'dark'>('dark');
 const [fontSize, setFontSize] = useState<'sm' | 'base' | 'lg'>('base');
 const [contentTab, setContentTab] = useState<'full' | 'snippet'>('full');
 const [copiedLink, setCopiedLink] = useState(false);
@@ -88,37 +88,33 @@ const handleCopyLink = (url: string) => {
   return (
       <div 
         onClick={() => onClose()}
-        className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150"
+        className="fixed inset-0 bg-scrim backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-150"
       >
         <div 
           onClick={(e) => e.stopPropagation()} 
-          className={`rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden border transition-colors duration-200 animate-in zoom-in-95 duration-150 ${
-            readerTheme === 'paper' 
-              ? 'bg-[#fcf8f2] text-[#2c2621] border-[#e8dfd5]' 
-              : readerTheme === 'dark' 
-                ? 'bg-slate-900 text-slate-100 border-slate-800' 
-                : 'bg-white text-slate-900 border-slate-200'
-          }`}
+          className={`rounded-card shadow-pop max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden border transition-colors duration-200 animate-in zoom-in-95 duration-150 ${
+            readerTheme === 'paper' ? 'theme-paper' : readerTheme === 'light' ? 'theme-light' : ''
+          } bg-surface text-ink border-line`}
         >
           {/* 1. 최상단 실시간 독서 진행률 게이지 바 (Reading Progress Bar) */}
-          <div className="w-full bg-slate-200/50 dark:bg-slate-800 h-1 relative overflow-hidden shrink-0">
+          <div className="w-full bg-surface-3 h-1 relative overflow-hidden shrink-0">
             <div 
-              className="h-full bg-gradient-to-r from-blue-600 via-indigo-500 to-sky-400 transition-all duration-75 ease-out" 
+              className="h-full bg-accent transition-all duration-75 ease-out" 
               style={{ width: `${scrollProgress}%` }}
             />
           </div>
 
           {/* 2. 상단 에디토리얼 도구 모음 헤더 */}
           <div className={`px-5 py-3 border-b flex items-center justify-between gap-3 shrink-0 ${
-            readerTheme === 'dark' ? 'bg-slate-950/80 border-slate-800 text-slate-300' : 'bg-slate-50/90 border-slate-200 text-slate-700'
+            'bg-surface-2 border-line text-ink-2'
           }`}>
             <div className="flex items-center gap-2 min-w-0">
-              <BookOpen size={16} className="text-blue-500 shrink-0" />
+              <BookOpen size={16} className="text-accent shrink-0" />
               <span className="font-bold text-xs truncate">
                 {article.parsed?.isRss ? `[${article.parsed.channel}] 에디토리얼 리더 뷰` : '수집 항목 리더 뷰'}
               </span>
               {article.parsed?.readingTime && (
-                <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold text-slate-500 bg-white/60 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-full">
+                <span className="hidden sm:inline-flex items-center gap-1 text-xs font-semibold text-ink-3 bg-surface border border-line px-2 py-0.5 rounded-full">
                   <Clock size={10} /> 약 {scrapedData?.readingTimeMinutes || article.parsed.readingTime}분 분량
                 </span>
               )}
@@ -127,24 +123,27 @@ const handleCopyLink = (url: string) => {
             {/* 뷰어 도구 컨트롤 (테마, 폰트 크기, 복사, 새창, 닫기) */}
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               {/* 리더 테마 스위처 */}
-              <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 text-xs">
+              <div className="flex items-center bg-surface border border-line rounded-control p-0.5 text-xs">
                 <button
                   onClick={() => setReaderTheme('light')}
-                  className={`px-2 py-1 rounded text-[11px] font-bold transition flex items-center gap-1 ${readerTheme === 'light' ? 'bg-blue-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-900'}`}
+                  aria-pressed={readerTheme === 'light'}
+                  className={`px-2 py-1 rounded-control text-xs font-bold transition flex items-center gap-1 ${readerTheme === 'light' ? 'bg-accent text-accent-ink' : 'text-ink-3 hover:text-ink'}`}
                   title="라이트 모드"
                 >
                   <Sun size={12} />
                 </button>
                 <button
                   onClick={() => setReaderTheme('paper')}
-                  className={`px-2 py-1 rounded text-[11px] font-bold transition flex items-center gap-1 ${readerTheme === 'paper' ? 'bg-[#936d4b] text-white shadow-2xs' : 'text-slate-500 hover:text-slate-900'}`}
+                  aria-pressed={readerTheme === 'paper'}
+                  className={`px-2 py-1 rounded-control text-xs font-bold transition flex items-center gap-1 ${readerTheme === 'paper' ? 'bg-accent text-accent-ink' : 'text-ink-3 hover:text-ink'}`}
                   title="페이퍼 모드 (눈 편한 세피아)"
                 >
                   📜
                 </button>
                 <button
                   onClick={() => setReaderTheme('dark')}
-                  className={`px-2 py-1 rounded text-[11px] font-bold transition flex items-center gap-1 ${readerTheme === 'dark' ? 'bg-slate-700 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-900'}`}
+                  aria-pressed={readerTheme === 'dark'}
+                  className={`px-2 py-1 rounded-control text-xs font-bold transition flex items-center gap-1 ${readerTheme === 'dark' ? 'bg-accent text-accent-ink' : 'text-ink-3 hover:text-ink'}`}
                   title="다크 모드"
                 >
                   <Moon size={12} />
@@ -152,24 +151,24 @@ const handleCopyLink = (url: string) => {
               </div>
 
               {/* 폰트 크기 조절 */}
-              <div className="flex items-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 text-xs font-bold text-slate-600 dark:text-slate-300">
+              <div className="flex items-center bg-surface border border-line rounded-control p-0.5 text-xs font-bold text-ink-2">
                 <button 
                   onClick={() => setFontSize('sm')} 
-                  className={`px-2 py-1 rounded text-[11px] ${fontSize === 'sm' ? 'bg-slate-200 dark:bg-slate-700 text-blue-600' : ''}`}
+                  className={`px-2 py-1 rounded-control text-xs ${fontSize === 'sm' ? 'bg-surface-3 text-accent' : ''}`}
                   title="작은 글씨"
                 >
                   A-
                 </button>
                 <button 
                   onClick={() => setFontSize('base')} 
-                  className={`px-2 py-1 rounded text-[11px] ${fontSize === 'base' ? 'bg-slate-200 dark:bg-slate-700 text-blue-600' : ''}`}
+                  className={`px-2 py-1 rounded-control text-xs ${fontSize === 'base' ? 'bg-surface-3 text-accent' : ''}`}
                   title="보통 글씨"
                 >
                   A
                 </button>
                 <button 
                   onClick={() => setFontSize('lg')} 
-                  className={`px-2 py-1 rounded text-[11px] ${fontSize === 'lg' ? 'bg-slate-200 dark:bg-slate-700 text-blue-600' : ''}`}
+                  className={`px-2 py-1 rounded-control text-xs ${fontSize === 'lg' ? 'bg-surface-3 text-accent' : ''}`}
                   title="큰 글씨"
                 >
                   A+
@@ -180,10 +179,10 @@ const handleCopyLink = (url: string) => {
               {article.parsed?.link && (
                 <button
                   onClick={() => handleCopyLink(article.parsed.link)}
-                  className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 py-1 rounded-lg text-xs font-semibold hover:bg-slate-100 transition flex items-center gap-1 shadow-2xs cursor-pointer"
+                  className="bg-surface border border-line text-ink-2 px-2 py-1 rounded-control text-xs font-semibold hover:bg-surface-2 transition flex items-center gap-1 cursor-pointer"
                   title="원문 링크 복사"
                 >
-                  {copiedLink ? <CheckCheck size={13} className="text-emerald-500" /> : <Copy size={13} />}
+                  {copiedLink ? <CheckCheck size={13} className="text-published" /> : <Copy size={13} />}
                   <span className="hidden md:inline">{copiedLink ? '복사됨!' : '복사'}</span>
                 </button>
               )}
@@ -194,7 +193,7 @@ const handleCopyLink = (url: string) => {
                   href={article.parsed.link}
                   target="_blank"
                   rel="noreferrer"
-                  className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 p-1.5 rounded-lg hover:bg-slate-100 transition shadow-2xs"
+                  className="bg-surface border border-line text-ink-2 p-1.5 rounded-control hover:bg-surface-2 transition"
                   title="원문 웹페이지 새 탭으로 열기"
                 >
                   <ExternalLink size={13} />
@@ -204,7 +203,7 @@ const handleCopyLink = (url: string) => {
               {/* 닫기 버튼 */}
               <button 
                 onClick={() => onClose()} 
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-slate-800 transition cursor-pointer"
+                className="text-ink-3 hover:text-ink-2 p-1.5 rounded-control hover:bg-surface-3 transition cursor-pointer"
                 title="닫기 (ESC 또는 바깥 여백 클릭)"
               >
                 <X size={18} />
@@ -224,7 +223,7 @@ const handleCopyLink = (url: string) => {
           >
             {/* 스크래핑된 OG 대표 이미지 배너 */}
             {scrapedData?.ogImage && (
-              <div className="rounded-xl overflow-hidden shadow-sm max-h-64 border border-slate-200/60 dark:border-slate-700 relative group">
+              <div className="rounded-card overflow-hidden max-h-64 border border-line relative group">
                 <img 
                   src={scrapedData.ogImage} 
                   alt="" 
@@ -237,17 +236,17 @@ const handleCopyLink = (url: string) => {
             {/* 헤드라인 및 출처 메타정보 */}
             <div>
               <div className="flex flex-wrap items-center gap-2 text-xs mb-2">
-                <span className="font-bold text-blue-600 bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-900 px-2 py-0.5 rounded-md">
+                <span className="font-bold text-accent bg-accent/10 border border-accent/40 px-2 py-0.5 rounded-control">
                   {scrapedData?.siteName || article.parsed?.channel || '웹 수집'}
                 </span>
                 {scrapedData?.author && (
-                  <span className="text-slate-500 font-medium">by {scrapedData.author}</span>
+                  <span className="text-ink-3 font-medium">by {scrapedData.author}</span>
                 )}
-                <span className="text-slate-400 font-mono text-[11px]">
+                <span className="text-ink-3 font-mono text-xs">
                   수집 일시: {new Date(article.createdAt).toLocaleString()}
                 </span>
                 {scrapedData?.charCount ? (
-                  <span className="text-slate-400 text-[11px] font-mono">
+                  <span className="text-ink-3 text-xs font-mono">
                     • {scrapedData.charCount.toLocaleString()}자 (~{scrapedData.readingTimeMinutes}분 독서)
                   </span>
                 ) : null}
@@ -259,17 +258,13 @@ const handleCopyLink = (url: string) => {
             </div>
 
             {/* AI 실시간 3줄 요약 & 블로그 기획 패널 */}
-            <div className={`p-4.5 rounded-xl border transition-all ${
-              readerTheme === 'dark' 
-                ? 'bg-slate-800/80 border-slate-700' 
-                : readerTheme === 'paper' 
-                  ? 'bg-[#f4eee5] border-[#dfd5c7]' 
-                  : 'bg-gradient-to-br from-indigo-50/70 via-blue-50/50 to-sky-50/70 border-indigo-100 shadow-2xs'
+            <div className={`p-4.5 rounded-card border transition-all ${
+              'bg-info/10 border-info/40'
             }`}>
               <div className="flex items-center justify-between gap-3 mb-2.5">
                 <div className="flex items-center gap-2">
-                  <Sparkles size={16} className="text-indigo-600 animate-pulse" />
-                  <h3 className="font-black text-xs sm:text-sm text-indigo-900 dark:text-indigo-300 tracking-tight">
+                  <Sparkles size={16} className="text-info animate-pulse" />
+                  <h3 className="font-black text-xs sm:text-sm text-info tracking-tight">
                     AI 실시간 에디토리얼 어시스턴트
                   </h3>
                 </div>
@@ -278,7 +273,7 @@ const handleCopyLink = (url: string) => {
                   <button
                     onClick={handleQuickSummary}
                     disabled={isSummarizing}
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow-sm disabled:opacity-50 cursor-pointer"
+                    className="bg-accent hover:bg-accent-strong text-accent-ink px-3 py-1.5 rounded-control text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                   >
                     {isSummarizing ? (
                       <span className="flex items-center gap-1.5"><RotateCcw size={12} className="animate-spin" /> AI 분석 중...</span>
@@ -292,21 +287,21 @@ const handleCopyLink = (url: string) => {
               {aiSummary ? (
                 <div className="space-y-3 pt-1">
                   <div>
-                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-400 mb-1.5">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-info mb-1.5">
                       💡 핵심 요약 (Key Insights)
                     </h4>
                     <ul className="space-y-1.5">
                       {aiSummary.bullets.map((b, i) => (
                         <li key={i} className="text-xs leading-relaxed flex items-start gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-info mt-1.5 shrink-0" />
                           <span>{b}</span>
                         </li>
                       ))}
                     </ul>
                   </div>
 
-                  <div className="pt-2 border-t border-indigo-200/60 dark:border-slate-700/60">
-                    <h4 className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-400 mb-1">
+                  <div className="pt-2 border-t border-info/40">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-info mb-1">
                       🎯 블로그 작성 착안점 (Why It Matters)
                     </h4>
                     <p className="text-xs leading-relaxed font-medium">
@@ -316,9 +311,9 @@ const handleCopyLink = (url: string) => {
 
                   {aiSummary.keywords.length > 0 && (
                     <div className="pt-2 flex flex-wrap items-center gap-1.5">
-                      <span className="text-[10px] font-bold text-slate-400">추천 키워드 태그:</span>
+                      <span className="text-xs font-bold text-ink-3">추천 키워드 태그:</span>
                       {aiSummary.keywords.map((kw, i) => (
-                        <span key={i} className="text-[11px] font-semibold bg-white dark:bg-slate-700 border border-indigo-200 dark:border-slate-600 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded-md shadow-2xs">
+                        <span key={i} className="text-xs font-semibold bg-surface border border-info/40 text-info px-2 py-0.5 rounded-control">
                           #{kw}
                         </span>
                       ))}
@@ -326,20 +321,20 @@ const handleCopyLink = (url: string) => {
                   )}
                 </div>
               ) : (
-                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                <p className="text-xs text-ink-3 leading-relaxed">
                   상단 버튼을 누르면 AI가 본문 전체를 분석하여 <strong>3줄 핵심 요약</strong>, <strong>블로그 글감 착안점</strong>, <strong>추천 키워드 태그</strong>를 즉석에서 도출합니다.
                 </p>
               )}
             </div>
 
             {/* 탭 전환: [원문 전체 본문 스크래핑] vs [RSS 요약본] */}
-            <div className="flex border-b border-slate-200 dark:border-slate-700">
+            <div className="flex border-b border-line">
               <button
                 onClick={() => setContentTab('full')}
                 className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
                   contentTab === 'full' 
-                    ? 'border-blue-600 text-blue-600 dark:text-blue-400' 
-                    : 'border-transparent text-slate-400 hover:text-slate-600'
+                    ? 'border-accent text-accent' 
+                    : 'border-transparent text-ink-3 hover:text-ink-2'
                 }`}
               >
                 <FileText size={14} /> 원문 전체 본문 {isScraping && '(가져오는 중...)'}
@@ -348,8 +343,8 @@ const handleCopyLink = (url: string) => {
                 onClick={() => setContentTab('snippet')}
                 className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
                   contentTab === 'snippet' 
-                    ? 'border-blue-600 text-blue-600 dark:text-blue-400' 
-                    : 'border-transparent text-slate-400 hover:text-slate-600'
+                    ? 'border-accent text-accent' 
+                    : 'border-transparent text-ink-3 hover:text-ink-2'
                 }`}
               >
                 <Rss size={14} /> RSS 수집 요약본
@@ -363,11 +358,11 @@ const handleCopyLink = (url: string) => {
               {contentTab === 'full' ? (
                 isScraping ? (
                   <div className="space-y-3 py-6 animate-pulse">
-                    <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
-                    <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full"></div>
-                    <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-5/6"></div>
-                    <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-2/3"></div>
-                    <div className="py-2 text-center text-xs text-slate-400 font-mono">
+                    <div className="h-4 bg-surface-3 rounded-control w-3/4"></div>
+                    <div className="h-4 bg-surface-3 rounded-control w-full"></div>
+                    <div className="h-4 bg-surface-3 rounded-control w-5/6"></div>
+                    <div className="h-4 bg-surface-3 rounded-control w-2/3"></div>
+                    <div className="py-2 text-center text-xs text-ink-3 font-mono">
                       🌐 웹페이지 원문 전체 텍스트를 정밀 파싱하고 있습니다...
                     </div>
                   </div>
@@ -376,16 +371,16 @@ const handleCopyLink = (url: string) => {
                     {scrapedData.fullText}
                   </div>
                 ) : (
-                  <div className="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 rounded-lg text-xs text-amber-800 dark:text-amber-300 space-y-2">
+                  <div className="p-4 bg-draft/10 border border-draft/40 rounded-control text-xs text-draft space-y-2">
                     <p className="font-bold">웹사이트 원문 전체 스크래핑 안내</p>
                     <p>해당 웹페이지의 방화벽/봇 차단 정책으로 인해 본문 전체를 긁어오지 못했습니다. 아래의 RSS 요약본을 확인해 주세요.</p>
-                    <div className="pt-2 text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                    <div className="pt-2 text-ink-2 whitespace-pre-wrap">
                       {article.parsed?.snippet || article.content}
                     </div>
                   </div>
                 )
               ) : (
-                <div className="whitespace-pre-wrap leading-relaxed p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div className="whitespace-pre-wrap leading-relaxed p-4 bg-surface-2 rounded-control border border-line">
                   {article.parsed?.snippet || article.content}
                 </div>
               )}
@@ -394,10 +389,10 @@ const handleCopyLink = (url: string) => {
 
           {/* 4. 하단 플로팅 액션 도크 */}
           <div className={`px-6 py-4 border-t flex flex-col sm:flex-row justify-between items-center gap-3 shrink-0 ${
-            readerTheme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-slate-50 border-slate-200'
+            readerTheme === 'dark' ? 'bg-canvas border-line' : 'bg-surface-2 border-line'
           }`}>
-            <span className="text-xs text-slate-400 flex items-center gap-1.5">
-              <span>💡 단축키 <kbd className="px-1.5 py-0.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded font-mono text-[10px]">ESC</kbd> 또는 바깥 여백을 클릭해도 닫힙니다.</span>
+            <span className="text-xs text-ink-3 flex items-center gap-1.5">
+              <span>💡 단축키 <kbd className="px-1.5 py-0.5 bg-surface-3 text-ink-2 rounded-control font-mono text-xs">ESC</kbd> 또는 바깥 여백을 클릭해도 닫힙니다.</span>
             </span>
 
             <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
@@ -408,14 +403,14 @@ const handleCopyLink = (url: string) => {
                     onClose();
                     onProcess(id);
                   }}
-                  className="flex-1 sm:flex-initial bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
+                  className="flex-1 sm:flex-initial bg-accent hover:bg-accent-strong text-accent-ink px-4 py-2 rounded-control text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <Bot size={14} /> 1 재료함으로 즉시 정제
+                  <Bot size={14} /> 재료로 정제
                 </button>
               )}
               <button 
                 onClick={() => onClose()} 
-                className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 px-4 py-2 rounded-lg text-xs font-semibold transition shadow-2xs cursor-pointer"
+                className="bg-surface border border-line-strong text-ink-2 hover:bg-surface-2 px-4 py-2 rounded-control text-xs font-semibold transition cursor-pointer"
               >
                 닫기
               </button>
