@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
-import { PenTool, CheckCircle, Copy, Trash2, Link2, Video, Image as ImageIcon, MessageCircle, Eye, EyeOff, Edit3, Save, X, BarChart2, FileCheck } from 'lucide-react';
+import { PenTool, CheckCircle, Copy, Trash2, Link2, Video, Image as ImageIcon, MessageCircle, Eye, EyeOff, Edit3, Save, X, BarChart2, FileCheck, FileText } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { PipelinePanel } from '../components/PipelinePanel';
+import { Badge, Button, Card, CardHeader, EmptyState, Field, IconButton, Input, Notice, Page, PageHeader, Segmented, StageBadge, StatusBadge, Textarea, cn } from '../components/ui';
 
 const API_URL = '/api';
 
@@ -26,19 +27,47 @@ function PublishCheckBadge({ raw, verifying, onVerify }: { raw: string | null; v
   return (
     <div className="flex items-center gap-2">
       {check ? (
-        <span
-          title={`${new Date(check.checkedAt).toLocaleString()} · ${check.note}`}
-          className={`text-[11px] font-semibold px-2 py-1 rounded border ${check.ok ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`}
-        >
+        <Badge tone={check.ok ? 'published' : 'danger'} title={`${new Date(check.checkedAt).toLocaleString()} · ${check.note}`}>
           {check.ok ? `공개 확인됨 · 이미지 ${check.imageCount}/${check.expectedImages}` : `확인 실패 · ${check.note}`}
-        </span>
+        </Badge>
       ) : (
-        <span className="text-[11px] font-semibold px-2 py-1 rounded border bg-amber-50 text-amber-700 border-amber-200">공개 미확인</span>
+        <Badge tone="draft">공개 미확인</Badge>
       )}
-      <button onClick={onVerify} disabled={verifying} className="text-xs border border-slate-300 text-slate-700 px-2.5 py-1.5 rounded-md font-semibold hover:bg-slate-50 disabled:opacity-50">
+      <Button size="sm" onClick={onVerify} disabled={verifying}>
         {verifying ? '확인 중...' : check ? '다시 확인' : '공개 확인'}
-      </button>
+      </Button>
     </div>
+  );
+}
+
+const PLATFORM: Record<string, string> = { NAVER_BLOG: '네이버 블로그', INSTA: '인스타그램', SHORTS: '유튜브 숏츠', THREADS: '스레드' };
+
+// 작업실 왼쪽: 고를 수 있는 자료 묶음 하나
+function PickGroup({ title, hint, items, selected, onToggle, empty, emptyLink }: {
+  title: string; hint: string; items: any[]; selected: number[]; onToggle: (id: number) => void; empty: string; emptyLink: string;
+}) {
+  return (
+    <section>
+      <div className="mb-2 flex items-baseline justify-between gap-2">
+        <h3 className="text-xs font-bold text-ink-2">{title} <span className="font-normal text-ink-3">{hint}</span></h3>
+        <span className="text-xs tabular-nums text-ink-3">{selected.length > 0 ? `${selected.length}개 선택 / ` : ''}{items.length}건</span>
+      </div>
+      {items.length === 0 ? (
+        <p className="text-xs text-ink-3">{empty} <Link to={emptyLink} className="text-accent hover:text-accent-strong">추가하러 가기 →</Link></p>
+      ) : (
+        <div className="max-h-56 space-y-1.5 overflow-y-auto pr-1">
+          {items.map((item) => {
+            const on = selected.includes(item.id);
+            return (
+              <label key={item.id} className={cn('flex cursor-pointer items-start gap-2 rounded-control border p-2.5 transition', on ? 'border-accent/50 bg-accent/10 text-ink' : 'border-line text-ink-2 hover:bg-surface-2')}>
+                <input type="checkbox" checked={on} onChange={() => onToggle(item.id)} className="mt-0.5" />
+                <span className="line-clamp-2 text-xs leading-relaxed">{item.title ? <b className="text-ink">{item.title} · </b> : null}{item.content}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -100,9 +129,15 @@ export function PostsPage() {
     });
   }
 
+  // 대시보드 04/05 열에서 들어오면 ?stage=writing(작성 중) / ?stage=ready(발행 대기)로 한 번 더 거른다
+  const stageParam = searchParams.get('stage');
+  const stageFilter = stageParam === 'writing' || stageParam === 'ready' ? stageParam : null;
+
   const visiblePosts = posts.filter((post) => {
-    if (statusFilter === 'draft') return post.status === 'DRAFT';
-    if (statusFilter === 'published') return post.status === 'PUBLISHED';
+    if (statusFilter === 'draft' && post.status !== 'DRAFT') return false;
+    if (statusFilter === 'published' && post.status !== 'PUBLISHED') return false;
+    if (stageFilter === 'writing') return post.platform === 'NAVER_BLOG' && post.stage !== 'READY';
+    if (stageFilter === 'ready') return post.platform === 'NAVER_BLOG' && post.stage === 'READY';
     return true;
   });
 
@@ -253,225 +288,140 @@ export function PostsPage() {
     }
   };
 
+  const emptyText = statusFilter === 'published'
+    ? { title: '발행한 글이 없습니다.', description: '초안 아래에 발행 URL을 적고 "발행 처리"를 누르면 여기로 옮겨집니다.' }
+    : statusFilter === 'draft'
+      ? { title: '대기 중인 초안이 없습니다.', description: '왼쪽 작업실에서 자료를 골라 초안을 만들거나, 글감 보드에서 바로 초안을 만들 수 있습니다.' }
+      : { title: '아직 만든 초안이 없습니다.', description: '왼쪽 작업실에서 수집 자료·재료·규칙을 골라 "초안 만들기"를 눌러 보세요.' };
+
   return (
-    <div className="p-6 max-w-[1400px] mx-auto h-[calc(100vh-1rem)] flex flex-col lg:flex-row gap-6 overflow-hidden">
-      
-      {/* Left: Generator Form */}
-      <div className="w-full lg:w-[380px] flex flex-col h-full shrink-0">
-        <div className="mb-4 pb-2 border-b border-slate-200">
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight">작업실</h1>
-          <p className="text-sm text-slate-500 mt-1">자료와 규칙을 조합해 초안을 생성합니다.</p>
-        </div>
-        
-        <div className="bg-white p-5 rounded-lg border border-slate-200 flex-1 overflow-auto flex flex-col shadow-sm">
-          <div className="mb-5 shrink-0">
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">타겟 키워드 (선택)</label>
-            <input type="text" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="비워두시면 AI가 자동 도출" className="w-full p-2.5 text-sm border border-slate-300 rounded-md focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-slate-50" />
-            <p className="mt-2 text-[11px] leading-relaxed text-slate-500">수집 자료의 RSS 채널에 규칙이 있으면 그 규칙을 먼저 씁니다. 키워드를 적으면 그 키워드를 따릅니다. 글감과 규칙을 고르지 않으면 기본 글쓰기로 진행합니다.</p>
+    <Page wide className="lg:flex lg:h-full lg:gap-6 lg:overflow-hidden">
+      {/* 왼쪽: 작업실 (자료 고르기 → 초안 만들기) */}
+      <aside className="mb-section flex flex-col lg:mb-0 lg:h-full lg:w-[360px] lg:shrink-0">
+        <PageHeader step="04" title="초안 · 발행 대기" description="자료와 규칙을 골라 초안을 만들고, 완성된 글을 발행합니다." />
+
+        <Card className="flex flex-col lg:min-h-0 lg:flex-1">
+          <CardHeader title={<><PenTool size={15} className="text-accent" /> 작업실</>} description="아무것도 고르지 않으면 기본 글쓰기로 진행합니다." />
+          <div className="space-y-5 p-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+            <Field label="타겟 키워드 (선택)" hint="수집 자료의 RSS 채널에 규칙이 있으면 그 규칙을 먼저 씁니다. 키워드를 적으면 그 키워드를 따릅니다.">
+              <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="비워두면 AI가 자동 도출" />
+            </Field>
+            <PickGroup title="수집 자료" hint="01" items={inboxes} selected={selectedInboxIds} onToggle={toggleSelectInbox} empty="처리할 수집 자료가 없습니다." emptyLink="/inbox" />
+            <PickGroup title="재료" hint="03" items={materials} selected={selectedMaterialIds} onToggle={toggleSelectMaterial} empty="등록된 재료가 없습니다." emptyLink="/materials" />
+            <PickGroup title="규칙" hint="03" items={rules} selected={selectedRuleIds} onToggle={toggleSelectRule} empty="등록된 규칙이 없습니다." emptyLink="/rules" />
           </div>
-          
-          <div className="space-y-6 overflow-y-auto pr-1 pb-2 flex-1 scrollbar-thin">
-            
-            {/* 1. 수집함 데이터 선택 */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 flex justify-between items-center">
-                <span>0. 수집된 원시 자료</span>
-                <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{inboxes.length}건</span>
-              </label>
-              <div className="space-y-2">
-                {inboxes.length === 0 && <p className="text-xs text-slate-400 italic">처리할 수집 자료가 없습니다.</p>}
-                {inboxes.map(item => (
-                  <label key={item.id} className={`flex items-start gap-2 p-2.5 border rounded-md cursor-pointer transition ${selectedInboxIds.includes(item.id) ? 'border-blue-500 bg-blue-50 text-blue-900' : 'border-slate-200 hover:bg-slate-50 text-slate-700'}`}>
-                    <input type="checkbox" checked={selectedInboxIds.includes(item.id)} onChange={() => toggleSelectInbox(item.id)} className="mt-0.5" />
-                    <p className="text-xs leading-relaxed line-clamp-2">{item.content}</p>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* 2. 재료 템플릿 선택 */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 flex justify-between items-center">
-                <span>1. 글감 템플릿</span>
-                <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{materials.length}건</span>
-              </label>
-              <div className="space-y-2">
-                {materials.length === 0 && <p className="text-xs text-slate-400 italic">등록된 글감 템플릿이 없습니다.</p>}
-                {materials.map(m => (
-                  <label key={m.id} className={`flex items-start gap-2 p-2.5 border rounded-md cursor-pointer transition ${selectedMaterialIds.includes(m.id) ? 'border-emerald-500 bg-emerald-50 text-emerald-900' : 'border-slate-200 hover:bg-slate-50 text-slate-700'}`}>
-                    <input type="checkbox" checked={selectedMaterialIds.includes(m.id)} onChange={() => toggleSelectMaterial(m.id)} className="mt-0.5" />
-                    <p className="text-xs leading-relaxed line-clamp-2">{m.content}</p>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* 3. 규칙 템플릿 선택 */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 flex justify-between items-center">
-                <span>2. 규칙 템플릿</span>
-                <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{rules.length}건</span>
-              </label>
-              <div className="space-y-2">
-                {rules.length === 0 && <p className="text-xs text-slate-400 italic">등록된 규칙이 없습니다.</p>}
-                {rules.map(r => (
-                  <label key={r.id} className={`flex items-start gap-2 p-2.5 border rounded-md cursor-pointer transition ${selectedRuleIds.includes(r.id) ? 'border-orange-500 bg-orange-50 text-orange-900' : 'border-slate-200 hover:bg-slate-50 text-slate-700'}`}>
-                    <input type="checkbox" checked={selectedRuleIds.includes(r.id)} onChange={() => toggleSelectRule(r.id)} className="mt-0.5" />
-                    <p className="text-xs leading-relaxed line-clamp-2">{r.content}</p>
-                  </label>
-                ))}
-              </div>
-            </div>
-
+          <div className="border-t border-line p-3">
+            <Button variant="primary" icon={<PenTool size={15} />} onClick={handleGenerate} disabled={generating} size="lg" className="w-full">
+              {generating ? 'AI 초안 작성 중...' : '초안 만들기'}
+            </Button>
           </div>
-        </div>
-        <button onClick={handleGenerate} disabled={generating} className="mt-4 w-full bg-blue-600 text-white py-3 rounded-lg text-sm font-bold shadow-sm hover:bg-blue-700 flex justify-center items-center gap-2 shrink-0 transition disabled:opacity-70 disabled:cursor-not-allowed">
-          {generating ? <span className="animate-pulse flex items-center gap-2"><PenTool size={16}/> AI 초안 작성 중...</span> : <><PenTool size={16} /> 초안 생성 실행</>}
-        </button>
-      </div>
+        </Card>
+      </aside>
 
-      {/* Right: Generated Posts List */}
-      <div className="w-full lg:flex-1 flex flex-col h-full bg-slate-50 rounded-xl border border-slate-200 overflow-hidden shadow-inner">
-        <div className="px-6 py-4 bg-white border-b border-slate-200 flex justify-between items-center shrink-0">
-          <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-green-500"></div>
-            3 발행 대기열 ({visiblePosts.length})
+      {/* 오른쪽: 초안 · 발행 대기열 */}
+      <section className="flex min-w-0 flex-col lg:h-full lg:flex-1">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-base font-bold text-ink">
+            발행 대기열 <span className="tabular-nums text-ink-3">{visiblePosts.length}</span>
           </h2>
-          <div className="flex gap-1">
-            {([['all', '전체'], ['draft', '초안'], ['published', '발행']] as const).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setStatusFilter(key)}
-                className={`text-xs font-semibold px-2.5 py-1 rounded-md border ${statusFilter === key ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300'}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <Segmented
+            options={[{ value: 'all', label: '전체' }, { value: 'draft', label: '초안' }, { value: 'published', label: '발행' }] as const}
+            value={statusFilter}
+            onChange={setStatusFilter}
+          />
         </div>
-        
-        <div className="p-6 overflow-y-auto flex-1 space-y-6">
+        {stageFilter && (
+          <Notice tone="info" className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <span>{stageFilter === 'ready' ? '완성되어 발행을 기다리는 블로그 글만 보는 중입니다.' : '아직 작성 단계가 남은 블로그 초안만 보는 중입니다.'}</span>
+            <button type="button" onClick={() => setStatusFilter('draft')} className="text-xs font-semibold text-accent hover:text-accent-strong">초안 전체 보기</button>
+          </Notice>
+        )}
+
+        <div className="space-y-4 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
           {visiblePosts.length === 0 && (
-             <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-3">
-               <PenTool size={32} className="opacity-20" />
-               <p className="text-sm">
-                 {statusFilter === 'published' ? '발행된 글이 없습니다.' : statusFilter === 'draft' ? '대기 중인 초안이 없습니다.' : '생성된 초안이 없습니다. 왼쪽 패널에서 생성해보세요.'}
-               </p>
-             </div>
+            <EmptyState icon={<FileText size={28} />} title={emptyText.title} description={emptyText.description} />
           )}
           {visiblePosts.map(post => {
             const seo = getSeoStats(post.content, post.keyword);
             const isEditing = editingPostId === post.id;
+            const keywordOk = seo.keywordCount >= 3 && seo.keywordCount <= 6;
 
             return (
-              <div key={post.id} className="bg-white p-5 rounded-lg shadow-sm border border-slate-200">
-                
-                {/* Header */}
-                <div className="flex justify-between items-start mb-3 border-b border-slate-100 pb-3">
-                  <div className="flex-1 pr-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      {post.platform === 'NAVER_BLOG' && <span className="bg-green-100 text-green-700 text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">네이버 블로그</span>}
-                      {post.platform === 'INSTA' && <span className="bg-pink-100 text-pink-700 text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">인스타그램</span>}
-                      {post.platform === 'SHORTS' && <span className="bg-red-100 text-red-700 text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">유튜브 쇼츠</span>}
-                      {post.platform === 'THREADS' && <span className="bg-slate-800 text-white text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">스레드</span>}
-                      
-                      {post.status === 'PUBLISHED' ? (
-                        <span className="bg-blue-50 text-blue-600 border border-blue-200 text-[10px] px-2 py-0.5 rounded font-bold flex items-center gap-1 uppercase tracking-wider"><Link2 size={10}/> 발행됨</span>
-                      ) : (
-                        <span className="bg-slate-100 text-slate-600 border border-slate-200 text-[10px] px-2 py-0.5 rounded font-bold uppercase tracking-wider">대기중</span>
-                      )}
+              <Card key={post.id} className="p-4">
+                {/* 머리: 플랫폼·상태·제목 + 보기/수정/삭제 */}
+                <div className="mb-3 flex flex-col gap-3 border-b border-line pb-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                      <Badge>{PLATFORM[post.platform] || post.platform}</Badge>
+                      <StatusBadge status={post.status} />
+                      {post.isPipeline && post.status === 'DRAFT' && <StageBadge stage={post.stage} failed={Boolean(post.stageError)} />}
                     </div>
-
                     {isEditing ? (
-                      <input 
-                        type="text" 
-                        value={editTitle} 
-                        onChange={(e) => setEditTitle(e.target.value)} 
-                        className="w-full text-lg font-bold text-slate-900 border border-blue-400 p-2 rounded-md focus:outline-none bg-blue-50/30"
-                      />
+                      <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} className="text-base! font-bold" aria-label="제목" />
                     ) : (
-                      <h3 className="text-lg font-bold text-slate-900 leading-snug">{post.title}</h3>
+                      <h3 className="text-base font-bold leading-snug text-ink sm:text-lg">{post.title}</h3>
                     )}
-
                     {post.keyword && (
-                      <p className="text-xs text-slate-500 mt-2 flex items-center gap-1.5">
-                        <span className="text-slate-400">🎯 타겟 키워드:</span> 
-                        <span className="font-semibold text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded">{post.keyword}</span>
+                      <p className="mt-2 flex items-center gap-1.5 text-xs text-ink-3">
+                        타겟 키워드 <Badge tone="accent">{post.keyword}</Badge>
                       </p>
                     )}
                   </div>
 
-                  {/* Top action buttons */}
-                  <div className="flex items-center gap-2 shrink-0 self-start">
+                  <div className="flex shrink-0 items-center gap-1.5">
                     {!isEditing && (
                       <>
-                        <button onClick={() => toggleRawView(post.id)} className="text-xs bg-white text-slate-700 border border-slate-300 px-2.5 py-1.5 rounded-md font-semibold hover:bg-slate-50 flex items-center gap-1.5 transition shadow-sm">
-                          {!rawViewIds.includes(post.id) ? <><EyeOff size={14} className="text-slate-500" /> 원문보기</> : <><Eye size={14} className="text-blue-500" /> 미리보기</>}
-                        </button>
-                        <button onClick={() => handleStartEdit(post)} className="text-xs bg-white text-blue-600 border border-blue-200 px-2.5 py-1.5 rounded-md font-semibold hover:bg-blue-50 flex items-center gap-1.5 transition shadow-sm" title="직접 본문 수정">
-                          <Edit3 size={14} /> 수정
-                        </button>
+                        <Button size="sm" variant="ghost" icon={rawViewIds.includes(post.id) ? <Eye size={14} /> : <EyeOff size={14} />} onClick={() => toggleRawView(post.id)}>
+                          {rawViewIds.includes(post.id) ? '미리보기' : '원문보기'}
+                        </Button>
+                        <Button size="sm" icon={<Edit3 size={14} />} onClick={() => handleStartEdit(post)} title="직접 본문 수정">수정</Button>
                       </>
                     )}
-                    <button onClick={async () => {
-                      if (confirm("이 초안을 삭제하시겠습니까?")) {
-                        try {
-                          await axios.delete(`${API_URL}/posts/${post.id}`);
-                          fetchPosts();
-                        } catch (e) {
-                          alert(apiErrorMessage(e, "삭제 중 오류가 발생했습니다."));
+                    <IconButton
+                      title="삭제"
+                      variant="ghostDanger"
+                      onClick={async () => {
+                        if (confirm("이 초안을 삭제하시겠습니까?")) {
+                          try {
+                            await axios.delete(`${API_URL}/posts/${post.id}`);
+                            fetchPosts();
+                          } catch (e) {
+                            alert(apiErrorMessage(e, "삭제 중 오류가 발생했습니다."));
+                          }
                         }
-                      }
-                    }} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded transition" title="삭제">
-                      <Trash2 size={16}/>
-                    </button>
+                      }}
+                    >
+                      <Trash2 size={15} />
+                    </IconButton>
                   </div>
                 </div>
 
-                {/* 실시간 SEO & GEO 스코어보드 */}
-                <div className="mb-4 bg-slate-50 border border-slate-200 rounded-md p-2.5 flex flex-wrap gap-3 items-center text-xs">
-                  <span className="font-bold text-slate-500 flex items-center gap-1 shrink-0"><BarChart2 size={13} className="text-blue-500"/> SEO 지표:</span>
-                  <span className={`px-2 py-0.5 rounded font-semibold border ${seo.keywordCount >= 3 && seo.keywordCount <= 6 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                    키워드 밀도: {seo.keywordCount}회 {seo.keywordCount >= 3 && seo.keywordCount <= 6 ? '✅ 적정' : '⚠️ 3~6회 권장'}
-                  </span>
-                  <span className="bg-white border border-slate-200 text-slate-700 px-2 py-0.5 rounded font-medium">
-                    본문 분량: <strong>{seo.charCount.toLocaleString()}</strong>자 (약 {seo.readingMinutes}분 완독)
-                  </span>
-                  <span className="bg-white border border-slate-200 text-slate-700 px-2 py-0.5 rounded font-medium">
-                    소제목: <strong>{seo.h2Count}</strong>개
-                  </span>
-                  <span className="bg-white border border-slate-200 text-slate-700 px-2 py-0.5 rounded font-medium">
-                    시각 자료: <strong>{seo.imgCount}</strong>장
-                  </span>
+                {/* SEO 지표 */}
+                <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs">
+                  <span className="mr-1 flex items-center gap-1 font-semibold text-ink-3"><BarChart2 size={13} /> SEO</span>
+                  <Badge tone={keywordOk ? 'published' : 'draft'}>키워드 {seo.keywordCount}회 {keywordOk ? '· 적정' : '· 3~6회 권장'}</Badge>
+                  <Badge>{seo.charCount.toLocaleString()}자 · 약 {seo.readingMinutes}분</Badge>
+                  <Badge>소제목 {seo.h2Count}개</Badge>
+                  <Badge>이미지 {seo.imgCount}장</Badge>
                 </div>
-                
+
                 {post.isPipeline && (
                   <PipelinePanel post={post} resuming={resumingId === post.id} onResume={() => handleResume(post.id)} onChanged={fetchPosts} />
                 )}
 
-                {/* Content body / Inline editor */}
+                {/* 본문 / 인라인 수정 */}
                 {isEditing ? (
                   <div className="space-y-3">
-                    <textarea 
-                      value={editContent} 
-                      onChange={(e) => setEditContent(e.target.value)} 
-                      rows={14} 
-                      className="w-full p-4 text-sm font-mono border border-blue-400 rounded-md focus:outline-none bg-white leading-relaxed resize-y shadow-inner"
-                    />
+                    <Textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} rows={14} className="font-mono" aria-label="본문" />
                     <div className="flex justify-end gap-2">
-                      <button onClick={handleCancelEdit} className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded-md font-semibold flex items-center gap-1 transition">
-                        <X size={14}/> 취소
-                      </button>
-                      <button onClick={() => handleSaveEdit(post.id)} className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-md font-semibold flex items-center gap-1 shadow-sm transition">
-                        <Save size={14}/> 수정 저장 완료
-                      </button>
+                      <Button variant="ghost" icon={<X size={14} />} onClick={handleCancelEdit}>취소</Button>
+                      <Button variant="primary" icon={<Save size={14} />} onClick={() => handleSaveEdit(post.id)}>수정 저장</Button>
                     </div>
                   </div>
                 ) : (
-                  <div 
-                    id={`post-preview-${post.id}`} 
-                    className={`prose prose-sm prose-slate max-w-none text-slate-800 bg-slate-50 p-4 rounded-md border border-slate-200 leading-relaxed text-sm ${!rawViewIds.includes(post.id) ? '' : 'whitespace-pre-wrap'}`}
+                  <div
+                    id={`post-preview-${post.id}`}
+                    className={cn('prose prose-sm prose-invert max-w-none [overflow-wrap:anywhere] rounded-control border border-line bg-surface-2 p-4 text-sm leading-relaxed text-ink', rawViewIds.includes(post.id) && 'whitespace-pre-wrap')}
                   >
                     {!rawViewIds.includes(post.id) ? (
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -482,65 +432,54 @@ export function PostsPage() {
                     )}
                   </div>
                 )}
-                
-                {/* Bottom OSMU & Publish Action Bar */}
-                <div className="mt-5 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
-                  <div className="flex gap-2 w-full xl:w-auto">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider self-center mr-1">OSMU 변환</span>
-                    <button onClick={() => handleOSMU(post.id, 'INSTA')} disabled={osmuLoading === post.id} className="text-xs bg-white text-pink-600 px-3 py-1.5 rounded-md font-medium hover:bg-pink-50 flex items-center gap-1.5 transition border border-slate-200 hover:border-pink-200 shadow-sm">
-                      <ImageIcon size={14}/> 인스타
-                    </button>
-                    <button onClick={() => handleOSMU(post.id, 'SHORTS')} disabled={osmuLoading === post.id} className="text-xs bg-white text-red-600 px-3 py-1.5 rounded-md font-medium hover:bg-red-50 flex items-center gap-1.5 transition border border-slate-200 hover:border-red-200 shadow-sm">
-                      <Video size={14}/> 숏츠
-                    </button>
-                    <button onClick={() => handleOSMU(post.id, 'THREADS')} disabled={osmuLoading === post.id} className="text-xs bg-white text-slate-700 px-3 py-1.5 rounded-md font-medium hover:bg-slate-100 flex items-center gap-1.5 transition border border-slate-200 hover:border-slate-300 shadow-sm">
-                      <MessageCircle size={14}/> 스레드
-                    </button>
-                    {osmuLoading === post.id && <span className="text-xs text-blue-500 animate-pulse self-center ml-2">변환 중...</span>}
+
+                {/* 아래: 파생 글 만들기 · 발행 · 복사 */}
+                <div className="mt-4 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="mr-1 text-xs font-semibold text-ink-3">파생 글</span>
+                    <Button size="sm" variant="ghost" icon={<ImageIcon size={14} />} onClick={() => handleOSMU(post.id, 'INSTA')} disabled={osmuLoading === post.id}>인스타</Button>
+                    <Button size="sm" variant="ghost" icon={<Video size={14} />} onClick={() => handleOSMU(post.id, 'SHORTS')} disabled={osmuLoading === post.id}>숏츠</Button>
+                    <Button size="sm" variant="ghost" icon={<MessageCircle size={14} />} onClick={() => handleOSMU(post.id, 'THREADS')} disabled={osmuLoading === post.id}>스레드</Button>
+                    {osmuLoading === post.id && <span className="ml-1 animate-pulse text-xs text-accent">변환 중...</span>}
                   </div>
 
-                  <div className="flex flex-col xl:flex-row items-end xl:items-center gap-2 w-full xl:w-auto">
+                  <div className="flex flex-wrap items-center gap-2 xl:justify-end">
                     {post.status === 'DRAFT' && (
-                      <div className="flex gap-2">
-                        <input 
-                          type="text" 
-                          placeholder="발행된 URL 입력" 
-                          className="text-xs p-2 border border-slate-300 rounded-md focus:outline-none focus:border-blue-500 w-48 bg-slate-50"
+                      <div className="flex w-full gap-2 sm:w-auto">
+                        <Input
+                          placeholder="발행된 URL 입력"
+                          className="h-8 py-1! text-xs! sm:w-52"
                           value={publishUrls[post.id] || ''}
                           onChange={(e) => setPublishUrls({...publishUrls, [post.id]: e.target.value})}
+                          aria-label="발행된 URL"
                         />
-                        <button onClick={() => handlePublish(post.id)} className="text-xs bg-white border border-slate-300 text-slate-700 px-3 py-2 rounded-md font-semibold hover:bg-slate-50 flex items-center gap-1.5 transition shadow-sm">
-                          <CheckCircle size={14} className="text-green-600"/> 발행 처리
-                        </button>
+                        <Button size="sm" icon={<CheckCircle size={14} />} onClick={() => handlePublish(post.id)}>발행 처리</Button>
                       </div>
                     )}
                     {post.status === 'PUBLISHED' && post.publishedUrl && (
-                      <a href={post.publishedUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 mr-2 font-medium">
+                      <a href={post.publishedUrl} target="_blank" rel="noreferrer" className="mr-1 flex items-center gap-1 text-xs font-medium text-accent hover:text-accent-strong">
                         <Link2 size={14}/> 발행 링크 열기
                       </a>
                     )}
                     {post.status === 'PUBLISHED' && post.publishedUrl && (
                       <PublishCheckBadge raw={post.publishCheck} verifying={verifyingId === post.id} onVerify={() => handleVerify(post.id)} />
                     )}
-                    
-                    {/* 네이버 스마트에디터 맞춤 서식 복사 버튼 */}
-                    <button onClick={() => handleCopyNaverHtml(post.id)} className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-md font-semibold flex items-center gap-1.5 transition shadow-sm" title="네이버 블로그 에디터에 붙여넣을 때 서식/이미지가 유지됩니다">
-                      <FileCheck size={14}/> 네이버 서식 복사
-                    </button>
-
-                    <button onClick={() => {
+                    <Button size="sm" variant="primary" icon={<FileCheck size={14} />} onClick={() => handleCopyNaverHtml(post.id)} title="네이버 블로그 에디터에 붙여넣을 때 서식/이미지가 유지됩니다">
+                      네이버 서식 복사
+                    </Button>
+                    <Button size="sm" icon={<Copy size={14} />} onClick={() => {
                       navigator.clipboard.writeText(post.content);
                       alert("텍스트가 복사되었습니다!");
-                    }} className="text-xs bg-slate-800 text-white px-3.5 py-2 rounded-md font-medium hover:bg-slate-900 flex items-center gap-1.5 transition shadow-sm">
-                      <Copy size={14}/> 텍스트 복사
-                    </button>
+                    }}>
+                      텍스트 복사
+                    </Button>
                   </div>
                 </div>
-              </div>
+              </Card>
             );
           })}
         </div>
-      </div>
-    </div>
+      </section>
+    </Page>
   );
 }

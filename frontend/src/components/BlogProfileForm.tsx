@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { UserCircle, ChevronDown, ChevronRight } from 'lucide-react';
+import { Button, Card, Field, Input } from './ui';
 
 const FIELDS = [
   { key: 'audience', label: '읽을 사람', placeholder: '예: 처음 매장을 여는 자영업자' },
@@ -39,38 +40,37 @@ export function BlogProfileForm() {
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-5 mb-6 shadow-sm">
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-          <UserCircle size={16} className="text-blue-500" /> 블로그 프로필
-          <span className="text-xs font-normal text-slate-500">모든 초안에 공통 적용 · {filled}/{FIELDS.length} 입력됨</span>
-        </h3>
-        {open ? <ChevronDown size={16} className="text-slate-400" /> : <ChevronRight size={16} className="text-slate-400" />}
+    <Card className="mb-4">
+      <button onClick={() => setOpen(!open)} aria-expanded={open} className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left">
+        <span className="min-w-0">
+          <span className="text-sm font-bold text-ink flex items-center gap-2">
+            <UserCircle size={15} className="text-accent" /> 블로그 프로필
+          </span>
+          <span className="block text-xs text-ink-3 mt-0.5">모든 초안에 공통 적용 · {filled}/{FIELDS.length} 입력됨</span>
+        </span>
+        {open ? <ChevronDown size={16} className="text-ink-3 shrink-0" /> : <ChevronRight size={16} className="text-ink-3 shrink-0" />}
       </button>
       {open && (
-        <div className="mt-4 space-y-3">
-          <p className="text-xs text-slate-500">빈 항목은 프롬프트에 넣지 않습니다. 이번 글에만 해당하는 사실은 여기 적지 마세요.</p>
+        <div className="border-t border-line p-4 space-y-3">
+          <p className="text-xs text-ink-3">빈 항목은 프롬프트에 넣지 않습니다. 이번 글에만 해당하는 사실은 여기 적지 마세요.</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {FIELDS.map((f) => (
-              <label key={f.key} className="text-xs font-semibold text-slate-600 flex flex-col gap-1">
-                {f.label}
-                <input
-                  type="text"
+              <Field key={f.key} label={f.label}>
+                <Input
                   value={profile[f.key] || ''}
                   placeholder={f.placeholder}
                   onChange={(e) => setProfile({ ...profile, [f.key]: e.target.value })}
-                  className="p-2 text-sm font-normal border border-slate-300 rounded-md focus:outline-none focus:border-blue-500 bg-slate-50"
                 />
-              </label>
+              </Field>
             ))}
           </div>
           <div className="flex justify-end">
-            <button onClick={handleSave} disabled={saving} className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-semibold disabled:opacity-50">
+            <Button variant="primary" onClick={handleSave} disabled={saving}>
               {saving ? '저장 중...' : '프로필 저장'}
-            </button>
+            </Button>
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }

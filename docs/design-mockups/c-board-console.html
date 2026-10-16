@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>시안 C · Board Console</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<style>
+  :root {
+    --bg: #0f1216; --surface: #161a20; --surface-2: #1d222a; --line: #262c35; --ink: #e8ebef; --ink-2: #a5adb9; --ink-3: #6b7480;
+    --accent: #2dd4bf; --accent-ink: #062a26;
+    --draft: #fbbf24; --pub: #4ade80; --r: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: "Pretendard Variable", system-ui, sans-serif; background: var(--bg); color: var(--ink); font-size: 14px; }
+  .app { display: flex; min-height: 100vh; }
+  aside { width: 64px; background: var(--surface); border-right: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; padding: 16px 0; gap: 6px; }
+  .logo { width: 34px; height: 34px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 900; margin-bottom: 16px; }
+  .ico { width: 40px; height: 40px; border-radius: 8px; display: grid; place-items: center; color: var(--ink-3); font-size: 12px; font-weight: 700; text-decoration: none; }
+  .ico.on { background: var(--surface-2); color: var(--accent); }
+  main { flex: 1; padding: 24px 28px; min-width: 0; }
+  .head { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  h1 { font-size: 18px; font-weight: 700; }
+  .pill { font-size: 12px; color: var(--accent); border: 1px solid #1f4d47; padding: 3px 10px; border-radius: 99px; }
+  .sp { flex: 1; }
+  .btn { background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); padding: 8px 12px; border-radius: 6px; font: inherit; font-weight: 600; cursor: pointer; }
+  .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  .board { display: grid; grid-template-columns: repeat(5, minmax(200px, 1fr)); gap: 12px; overflow-x: auto; }
+  .col { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); display: flex; flex-direction: column; min-height: 420px; }
+  .col header { padding: 12px 14px; display: flex; align-items: baseline; gap: 8px; border-bottom: 1px solid var(--line); }
+  .col header .n { color: var(--ink-3); font-size: 12px; font-weight: 700; }
+  .col header b { font-weight: 700; }
+  .col header .c { margin-left: auto; font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .cards { padding: 10px; display: grid; gap: 8px; align-content: start; }
+  .k { background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px 11px; line-height: 1.45; }
+  .k .m { margin-top: 6px; font-size: 12px; color: var(--ink-3); display: flex; gap: 6px; align-items: center; }
+  .tag { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 4px; border: 1px solid currentColor; }
+  .tag.draft { color: var(--draft); } .tag.pub { color: var(--pub); }
+  .more { color: var(--ink-3); font-size: 12px; text-align: center; padding: 6px; }
+  .empty { margin: 10px; padding: 18px 12px; border: 1px dashed var(--line); border-radius: 6px; text-align: center; color: var(--ink-3); font-size: 13px; line-height: 1.6; }
+  .empty .btn { margin-top: 10px; }
+  .col.hot { border-color: #1f4d47; }
+  .col.hot header .c { color: var(--accent); }
+  .strip { margin-top: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 14px; display: flex; gap: 18px; align-items: center; color: var(--ink-2); font-size: 13px; flex-wrap: wrap; }
+  .strip b { color: var(--ink); }
+  .live { width: 8px; height: 8px; border-radius: 50%; background: var(--pub); display: inline-block; margin-right: 6px; }
+  .topbar { display: none; }
+  @media (max-width: 767px) {
+    aside { display: none; }
+    .topbar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; }
+    .topbar .logo { margin: 0; width: 28px; height: 28px; }
+    .app { flex-direction: column; }
+    main { padding: 16px; }
+    .head { flex-wrap: wrap; }
+    .board { grid-template-columns: repeat(5, 78%); scroll-snap-type: x mandatory; }
+    .col { scroll-snap-align: start; min-height: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar"><div class="logo">A</div><b>대시보드</b><span class="sp" style="flex:1"></span><button class="btn">☰</button></div>
+<div class="app">
+  <aside>
+    <div class="logo">A</div>
+    <a class="ico on" href="#">홈</a>
+    <a class="ico" href="#">수집</a>
+    <a class="ico" href="#">글감</a>
+    <a class="ico" href="#">재료</a>
+    <a class="ico" href="#">초안</a>
+    <a class="ico" href="#">기록</a>
+  </aside>
+  <main>
+    <div class="head">
+      <h1>파이프라인</h1><span class="pill">자동 작성 켜짐 · 매일 09:00</span>
+      <span class="sp"></span>
+      <button class="btn">설정</button><button class="btn primary">지금 한 바퀴</button>
+    </div>
+    <div class="board">
+      <section class="col hot">
+        <header><span class="n">01</span><b>수집</b><span class="c">178</span></header>
+        <div class="cards">
+          <div class="k">Show GN: 맥북 데스크탑 부활이<div class="m">GeekNews · 00:39</div></div>
+          <div class="k">이스라엘 기업의 디지털 광고, '제로클릭' 스파이웨어 설치에 이용<div class="m">GeekNews · 00:39</div></div>
+          <div class="more">+176건 더 보기</div>
+        </div>
+      </section>
+      <section class="col">
+        <header><span class="n">02</span><b>글감</b><span class="c">5</span></header>
+        <div class="cards">
+          <div class="k">Tesla 로보택시의 스톱콘 피격 충돌, NHTSA 조사<div class="m">평가 대기</div></div>
+          <div class="more">+4건</div>
+        </div>
+      </section>
+      <section class="col">
+        <header><span class="n">03</span><b>재료 · 규칙</b><span class="c">4</span></header>
+        <div class="cards">
+          <div class="k">단계별 가이드형<div class="m">재료 · 기본 뼈대</div></div>
+          <div class="k">금지: AI 말투·번역투·과장<div class="m">규칙 · 말투</div></div>
+        </div>
+      </section>
+      <section class="col">
+        <header><span class="n">04</span><b>초안</b><span class="c">27</span></header>
+        <div class="cards">
+          <div class="k">책을 찍으면 한글(HWPX) 문서로 바꿔주는 앱이 있을까요?<div class="m"><span class="tag draft">IMAGES</span>01:27</div></div>
+          <div class="k">OpenCode 2.0은 무엇이 달라졌고…<div class="m"><span class="tag draft">POLISH</span>00:41</div></div>
+          <div class="more">+25건</div>
+        </div>
+      </section>
+      <section class="col">
+        <header><span class="n">05</span><b>발행 대기</b><span class="c">0</span></header>
+        <div class="empty">아직 발행한 글이 없어요.<br>초안에서 발행 URL을 기록하면 여기에 쌓입니다.<br><button class="btn">초안 열기</button></div>
+      </section>
+    </div>
+    <div class="strip"><span><span class="live"></span><b>최근 봇 활동</b> 01:27 · #32 초안 완성 (SOURCES부터, 150초)</span><span>활성 RSS <b>2</b></span><span>실패 <b>0</b></span></div>
+  </main>
+</div>
+</body>
+</html>

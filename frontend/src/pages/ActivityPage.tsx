@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { Activity, AlertTriangle, Bot, CheckCircle2, Hand, RotateCcw, Rss } from 'lucide-react';
+import { Badge, Button, Card, EmptyState, Notice, Page, PageHeader, Segmented, cn, type BadgeTone } from '../components/ui';
 
 const API_URL = '/api';
 const PAGE_SIZE = 50;
@@ -16,14 +17,14 @@ const KINDS = [
 ] as const;
 
 // 이벤트별 표시 이름·색·아이콘
-const EVENT_STYLE: Record<string, { label: string; className: string; icon: typeof Bot }> = {
-  CRON_RSS_MULTI: { label: '자동 수집', className: 'bg-sky-50 text-sky-700 border-sky-200', icon: Rss },
-  CRON_AUTO_PIPELINE: { label: '자동 작성', className: 'bg-blue-50 text-blue-700 border-blue-200', icon: Bot },
-  MANUAL_RSS: { label: '수동 수집', className: 'bg-slate-50 text-slate-700 border-slate-200', icon: Hand },
-  MANUAL_AUTO_PIPELINE: { label: '수동 작성', className: 'bg-slate-50 text-slate-700 border-slate-200', icon: Hand },
-  POST_READY: { label: '초안 완성', className: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: CheckCircle2 },
-  POST_STAGE_ERROR: { label: '단계 실패', className: 'bg-red-50 text-red-700 border-red-200', icon: AlertTriangle },
-  CRON_ERROR: { label: '수집 오류', className: 'bg-red-50 text-red-700 border-red-200', icon: AlertTriangle },
+const EVENT_STYLE: Record<string, { label: string; tone: BadgeTone; icon: typeof Bot }> = {
+  CRON_RSS_MULTI: { label: '자동 수집', tone: 'info', icon: Rss },
+  CRON_AUTO_PIPELINE: { label: '자동 작성', tone: 'accent', icon: Bot },
+  MANUAL_RSS: { label: '수동 수집', tone: 'neutral', icon: Hand },
+  MANUAL_AUTO_PIPELINE: { label: '수동 작성', tone: 'neutral', icon: Hand },
+  POST_READY: { label: '초안 완성', tone: 'published', icon: CheckCircle2 },
+  POST_STAGE_ERROR: { label: '단계 실패', tone: 'danger', icon: AlertTriangle },
+  CRON_ERROR: { label: '수집 오류', tone: 'danger', icon: AlertTriangle },
 };
 
 function dayLabel(date: Date) {
@@ -88,91 +89,75 @@ export function ActivityPage() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 mb-6 pb-4 border-b border-slate-200">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
-            <Activity size={20} className="text-blue-600" /> 활동 기록
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">자동 수집·자동 작성·초안 완성·오류를 시간순으로 모두 볼 수 있습니다.</p>
-        </div>
-        <button
-          onClick={() => load()}
-          disabled={loading}
-          className="bg-white text-slate-700 border border-slate-300 px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-slate-50 transition flex items-center gap-2 shadow-sm disabled:opacity-50"
-        >
-          <RotateCcw size={14} className={loading ? 'animate-spin' : ''} /> 새로고침
-        </button>
-      </div>
+    <Page>
+      <PageHeader
+        title="활동 기록"
+        description="자동 수집·자동 작성·초안 완성·오류를 시간순으로 모두 볼 수 있습니다. 1분마다 새로 불러옵니다."
+        actions={
+          <Button icon={<RotateCcw size={14} className={loading ? 'animate-spin' : ''} />} onClick={() => load()} disabled={loading}>
+            새로고침
+          </Button>
+        }
+      />
 
-      <div className="flex flex-wrap gap-2 mb-5">
-        {KINDS.map((k) => (
-          <button
-            key={k.value}
-            onClick={() => setKind(k.value)}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
-              kind === k.value ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
-            }`}
-          >
-            {k.label}
-          </button>
-        ))}
-      </div>
+      <Segmented options={KINDS} value={kind as (typeof KINDS)[number]['value']} onChange={setKind} className="mb-section" />
 
-      {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+      {error && <Notice tone="danger" className="mb-4">{error}</Notice>}
 
       {!loading && logs.length === 0 && !error && (
-        <p className="text-sm text-slate-400 py-16 text-center bg-white border border-slate-200 rounded-lg">기록이 없습니다.</p>
+        <EmptyState
+          icon={<Activity size={28} />}
+          title="기록이 없습니다."
+          description={kind ? '다른 종류를 고르거나 "전체"를 눌러 보세요.' : '자동 작성을 켜거나 대시보드에서 "지금 한 바퀴"를 누르면 기록이 쌓입니다.'}
+        />
       )}
 
-      <div className="space-y-6">
+      <div className="space-y-section">
         {groups.map((group) => (
           <section key={group.day}>
-            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{group.day}</h2>
-            <ul className="bg-white border border-slate-200 rounded-lg shadow-sm divide-y divide-slate-100">
-              {group.items.map((log) => {
-                const style = EVENT_STYLE[log.event]
-                  || (log.event.startsWith('CRON_RSS') ? EVENT_STYLE.CRON_RSS_MULTI : null)
-                  || { label: log.event, className: 'bg-slate-50 text-slate-600 border-slate-200', icon: Bot };
-                const Icon = style.icon;
-                const [headline, ...details] = log.message.split('\n');
-                return (
-                  <li key={log.id} className={`px-4 py-3 flex gap-3 ${hasFailure(log) ? 'bg-red-50/40' : ''}`}>
-                    <span className="text-xs font-mono text-slate-400 w-12 shrink-0 pt-0.5">
-                      {new Date(log.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })}
-                    </span>
-                    <span className={`h-fit shrink-0 inline-flex items-center gap-1 text-[11px] font-bold border px-2 py-0.5 rounded-md ${style.className}`}>
-                      <Icon size={12} /> {style.label}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm text-slate-800 break-words">{headline}</p>
-                      {details.length > 0 && (
-                        <ul className="mt-1 space-y-0.5">
-                          {details.map((line, i) => (
-                            <li key={i} className="text-xs text-slate-500 break-words">{line}</li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+            <h2 className="mb-2 text-xs font-bold text-ink-3">{group.day}</h2>
+            <Card>
+              <ul className="divide-y divide-line">
+                {group.items.map((log) => {
+                  const style = EVENT_STYLE[log.event]
+                    || (log.event.startsWith('CRON_RSS') ? EVENT_STYLE.CRON_RSS_MULTI : null)
+                    || { label: log.event, tone: 'neutral' as BadgeTone, icon: Bot };
+                  const Icon = style.icon;
+                  const [headline, ...details] = log.message.split('\n');
+                  return (
+                    <li key={log.id} className={cn('flex flex-col gap-1.5 px-4 py-3 sm:flex-row sm:gap-3', hasFailure(log) && 'bg-danger/5')}>
+                      <div className="flex shrink-0 items-center gap-2 sm:w-36 sm:items-start">
+                        <span className="w-11 pt-0.5 font-mono text-xs tabular-nums text-ink-3">
+                          {new Date(log.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                        </span>
+                        <Badge tone={style.tone} icon={<Icon size={12} />}>{style.label}</Badge>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="break-words text-sm text-ink">{headline}</p>
+                        {details.length > 0 && (
+                          <ul className="mt-1 space-y-0.5">
+                            {details.map((line, i) => (
+                              <li key={i} className="break-words text-xs text-ink-3">{line}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
           </section>
         ))}
       </div>
 
       {hasMore && (
-        <div className="mt-6 text-center">
-          <button
-            onClick={() => load(logs[logs.length - 1]?.id)}
-            disabled={loading}
-            className="text-sm font-semibold text-blue-600 hover:text-blue-800 px-4 py-2 disabled:opacity-50"
-          >
+        <div className="mt-section text-center">
+          <Button variant="ghost" onClick={() => load(logs[logs.length - 1]?.id)} disabled={loading}>
             {loading ? '불러오는 중…' : '이전 기록 더 보기'}
-          </button>
+          </Button>
         </div>
       )}
-    </div>
+    </Page>
   );
 }

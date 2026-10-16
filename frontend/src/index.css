@@ -1,9 +1,101 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/*
+ * 디자인 토큰 (시안 C · Board Console)
+ * 페이지에서는 slate/blue 같은 팔레트를 직접 쓰지 말고 아래 이름을 쓴다.
+ *   배경: canvas < surface < surface-2 < surface-3
+ *   글자: ink(본문) > ink-2(보조) > ink-3(흐림)
+ *   상태: draft · published · danger · info (+ /10 같은 투명도로 옅은 배경)
+ */
+@theme {
+  --color-canvas: #0f1216;
+  --color-surface: #161a20;
+  --color-surface-2: #1d222a;
+  --color-surface-3: #252b35;
+  --color-line: #262c35;
+  --color-line-strong: #343c48;
+
+  --color-ink: #e8ebef;
+  --color-ink-2: #a5adb9;
+  --color-ink-3: #6b7480;
+
+  --color-accent: #2dd4bf;
+  --color-accent-strong: #5eead4;
+  --color-accent-ink: #062a26;
+
+  /* 상태색: 글 상태(DRAFT/PUBLISHED), 단계 실패, 진행 중 */
+  --color-draft: #fbbf24;
+  --color-published: #4ade80;
+  --color-danger: #f87171;
+  --color-info: #60a5fa;
+
+  --radius-card: 8px;
+  --radius-control: 6px;
+
+  /* 모달·드로어 뒤를 덮는 반투명 막 */
+  --color-scrim: rgb(0 0 0 / 0.6);
+
+  --shadow-card: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 6px 20px rgb(0 0 0 / 0.25);
+  --shadow-pop: 0 12px 40px rgb(0 0 0 / 0.5);
+
+  --spacing-gutter: 1rem;
+  --spacing-section: 1.5rem;
+
+  --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+}
+
+/* 부분 테마: 이 클래스를 붙인 영역 안에서만 토큰 값이 바뀐다 (수집함 리더의 라이트/페이퍼 모드) */
+.theme-light {
+  color-scheme: light;
+  --color-canvas: #f4f5f7;
+  --color-surface: #ffffff;
+  --color-surface-2: #f4f5f7;
+  --color-surface-3: #e8ebef;
+  --color-line: #e2e5ea;
+  --color-line-strong: #cbd1d9;
+  --color-ink: #16181d;
+  --color-ink-2: #474e5b;
+  --color-ink-3: #7a8290;
+  --color-accent: #0d9488;
+  --color-accent-strong: #0f766e;
+  --color-accent-ink: #ffffff;
+  --color-draft: #b45309;
+  --color-published: #15803d;
+  --color-danger: #dc2626;
+  --color-info: #2563eb;
+}
+.theme-paper {
+  color-scheme: light;
+  --color-canvas: #f4eee5;
+  --color-surface: #fcf8f2;
+  --color-surface-2: #f4eee5;
+  --color-surface-3: #e9e0d3;
+  --color-line: #e8dfd5;
+  --color-line-strong: #d6c9b8;
+  --color-ink: #2c2621;
+  --color-ink-2: #574c42;
+  --color-ink-3: #8a7d70;
+  --color-accent: #936d4b;
+  --color-accent-strong: #7a5737;
+  --color-accent-ink: #ffffff;
+  --color-draft: #9a6a00;
+  --color-published: #3f6b3a;
+  --color-danger: #b42318;
+  --color-info: #6b5a8e;
+}
+
 @layer base {
+  :root {
+    color-scheme: dark;
+  }
   body {
-    font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
-    @apply bg-slate-50 text-slate-900;
+    @apply bg-canvas text-ink font-sans antialiased;
+  }
+  ::selection {
+    @apply bg-accent/30;
+  }
+  input[type='checkbox'] {
+    accent-color: var(--color-accent);
   }
 }

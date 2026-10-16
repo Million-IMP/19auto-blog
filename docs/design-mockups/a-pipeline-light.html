@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>시안 A · Pipeline Light</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<style>
+  :root {
+    --bg: #f7f8fa; --surface: #fff; --line: #e6e8ec; --ink: #16181d; --ink-2: #4b5260; --ink-3: #8a909c;
+    --accent: #4f46e5; --accent-soft: #eef0ff;
+    --draft: #b45309; --draft-bg: #fef3e2; --pub: #047857; --pub-bg: #e7f6ef;
+    --r: 10px; --shadow: 0 1px 2px rgba(16,24,40,.05);
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: "Pretendard Variable", system-ui, sans-serif; background: var(--bg); color: var(--ink); font-size: 14px; }
+  .app { display: flex; min-height: 100vh; }
+  aside { width: 232px; background: var(--surface); border-right: 1px solid var(--line); padding: 20px 12px; display: flex; flex-direction: column; gap: 4px; }
+  .logo { font-weight: 800; font-size: 16px; padding: 4px 10px 20px; display: flex; gap: 8px; align-items: center; }
+  .logo b { width: 26px; height: 26px; border-radius: 7px; background: var(--accent); color: #fff; display: grid; place-items: center; font-size: 13px; }
+  .navlabel { font-size: 12px; color: var(--ink-3); padding: 14px 10px 6px; font-weight: 600; }
+  .nav { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; color: var(--ink-2); text-decoration: none; }
+  .nav .n { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--line); font-size: 11px; display: grid; place-items: center; font-weight: 700; color: var(--ink-3); }
+  .nav.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .nav.on .n { border-color: var(--accent); background: var(--accent); color: #fff; }
+  .nav .c { margin-left: auto; font-size: 12px; color: var(--ink-3); }
+  main { flex: 1; padding: 32px; max-width: 1120px; }
+  h1 { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+  .sub { color: var(--ink-2); margin-top: 4px; }
+  .head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; margin-bottom: 24px; }
+  .btn { border: 1px solid var(--line); background: var(--surface); padding: 9px 14px; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; }
+  .btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--shadow); }
+  .pipe { display: grid; grid-template-columns: repeat(5, 1fr); padding: 6px; }
+  .step { padding: 18px 18px 16px; position: relative; border-radius: 8px; }
+  .step:not(:last-child)::after { content: "→"; position: absolute; right: -8px; top: 22px; color: var(--ink-3); }
+  .step .k { font-size: 12px; color: var(--ink-3); font-weight: 600; }
+  .step .v { font-size: 28px; font-weight: 800; margin-top: 6px; letter-spacing: -.02em; }
+  .step .v small { font-size: 13px; color: var(--ink-3); font-weight: 600; margin-left: 2px; }
+  .step .d { font-size: 13px; color: var(--ink-2); margin-top: 4px; }
+  .step.hot { background: var(--accent-soft); }
+  .step.hot .k { color: var(--accent); }
+  .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; margin-top: 16px; }
+  .card h2 { font-size: 15px; font-weight: 700; padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; }
+  .card h2 a { font-size: 13px; font-weight: 500; color: var(--accent); text-decoration: none; }
+  .row { display: flex; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--line); align-items: center; }
+  .row:last-child { border-bottom: 0; }
+  .row .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+  .badge.draft { background: var(--draft-bg); color: var(--draft); }
+  .badge.pub { background: var(--pub-bg); color: var(--pub); }
+  .time { color: var(--ink-3); font-size: 13px; width: 44px; }
+  .auto { padding: 18px; display: grid; gap: 12px; }
+  .kv { display: flex; justify-content: space-between; color: var(--ink-2); }
+  .kv b { color: var(--ink); }
+  .toggle { width: 36px; height: 20px; border-radius: 99px; background: var(--accent); position: relative; }
+  .toggle::after { content: ""; position: absolute; right: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+  .next { margin-top: 16px; padding: 16px 18px; display: flex; align-items: center; gap: 16px; border-left: 3px solid var(--accent); }
+  .next p { flex: 1; color: var(--ink-2); } .next p b { color: var(--ink); }
+  .topbar { display: none; }
+  @media (max-width: 767px) {
+    aside { display: none; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; }
+    .app { flex-direction: column; }
+    main { padding: 20px 16px; }
+    .head { flex-direction: column; align-items: stretch; }
+    .pipe { grid-template-columns: 1fr; }
+    .step { display: flex; align-items: baseline; gap: 12px; padding: 12px 14px; }
+    .step::after { display: none; }
+    .step .v { font-size: 20px; margin: 0; order: 2; margin-left: auto; }
+    .step .d { display: none; }
+    .grid { grid-template-columns: 1fr; }
+    .next { flex-direction: column; align-items: stretch; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar"><div class="logo" style="padding:0"><b>A</b>AutoBlog</div><button class="btn">☰</button></div>
+<div class="app">
+  <aside>
+    <div class="logo"><b>A</b>AutoBlog</div>
+    <a class="nav on" href="#">대시보드</a>
+    <div class="navlabel">글 만드는 순서</div>
+    <a class="nav" href="#"><span class="n">1</span>수집함<span class="c">178</span></a>
+    <a class="nav" href="#"><span class="n">2</span>글감 보드<span class="c">5</span></a>
+    <a class="nav" href="#"><span class="n">3</span>재료 · 규칙<span class="c">4</span></a>
+    <a class="nav" href="#"><span class="n">4</span>초안 · 발행 대기<span class="c">27</span></a>
+    <div class="navlabel">기록</div>
+    <a class="nav" href="#">활동 기록</a>
+  </aside>
+  <main>
+    <div class="head">
+      <div><h1>대시보드</h1><p class="sub">수집한 글이 초안을 거쳐 발행 대기까지 어디쯤 있는지 봅니다.</p></div>
+      <button class="btn primary">지금 한 바퀴 돌리기</button>
+    </div>
+
+    <div class="card pipe">
+      <div class="step hot"><div class="k">1 수집</div><div class="v">178<small>건</small></div><div class="d">분류 안 한 글</div></div>
+      <div class="step"><div class="k">2 글감</div><div class="v">5<small>건</small></div><div class="d">평가 대기</div></div>
+      <div class="step"><div class="k">3 재료 · 규칙</div><div class="v">4<small>개</small></div><div class="d">활성 템플릿</div></div>
+      <div class="step"><div class="k">4 초안</div><div class="v">27<small>건</small></div><div class="d">발행 전 글</div></div>
+      <div class="step"><div class="k">5 발행</div><div class="v">0<small>건</small></div><div class="d">URL 기록됨</div></div>
+    </div>
+
+    <div class="card next">
+      <p><b>다음 할 일:</b> 수집함에 분류 안 한 글이 178건 있습니다. 글감 보드에서 5건을 골라 평가해 보세요.</p>
+      <button class="btn">글감 고르러 가기 →</button>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>최근 초안 <a href="#">발행 대기열 →</a></h2>
+        <div class="row"><span class="badge draft">초안</span><span class="t">책을 찍으면 한글(HWPX) 문서로 바꿔주는 앱이 있을까요?</span></div>
+        <div class="row"><span class="badge draft">초안</span><span class="t">Apple Keynote UI에 광고가 표시된다는데, 무엇이 바뀌었을까요?</span></div>
+        <div class="row"><span class="badge draft">초안</span><span class="t">OpenCode 2.0은 무엇이 달라졌고, 내 개발 환경에 맞을까?</span></div>
+        <div class="row"><span class="badge pub">발행</span><span class="t">Anthropic 새 버전 관리 시스템 정리</span></div>
+      </div>
+      <div class="card">
+        <h2>자동 작성 <span class="toggle"></span></h2>
+        <div class="auto">
+          <div class="kv">실행 시각 <b>매일 09:00</b></div>
+          <div class="kv">한 번에 <b>3건</b></div>
+          <div class="kv">초안 대상 <b>새 RSS 글마다</b></div>
+          <div class="kv">마지막 실행 <b>오늘 01:27 · 초안 1건</b></div>
+          <button class="btn">설정 바꾸기</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>
