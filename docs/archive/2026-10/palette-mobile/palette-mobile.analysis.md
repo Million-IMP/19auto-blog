@@ -3,7 +3,7 @@
 > **Feature**: palette-mobile
 > **Date**: 2026-10-16
 > **Branch**: feat/palette-mobile (base master a9a311f)
-> **Design**: [palette-mobile.design.md](../02-design/features/palette-mobile.design.md)
+> **Design**: [palette-mobile.design.md](./palette-mobile.design.md)
 > **Match Rate**: **99%** (runtime 포함 공식)
 
 ---
