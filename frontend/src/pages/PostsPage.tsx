@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { PenTool, CheckCircle, Copy, Trash2, Link2, Video, Image as ImageIcon, MessageCircle, Eye, EyeOff, Edit3, Save, X, BarChart2, FileCheck, FileText } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -122,6 +122,22 @@ export function PostsPage() {
     setMaterials(resMaterials.data);
     setRules(resRules.data);
   };
+
+  // 명령창에서 글을 고르면 /posts#post-12 로 온다. 목록이 그려진 뒤 그 글로 스크롤한다.
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (!hash.startsWith('#post-') || posts.length === 0) return;
+    const el = document.getElementById(hash.slice(1));
+    if (!el) return;
+    // 그려진 다음 프레임에 이동 (부드러운 스크롤은 목록이 늘어나며 취소돼서 즉시 이동)
+    const frame = window.requestAnimationFrame(() => el.scrollIntoView({ block: 'start' }));
+    el.classList.add('ring-2', 'ring-accent');
+    const timer = window.setTimeout(() => el.classList.remove('ring-2', 'ring-accent'), 2000);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [hash, posts]);
 
   const fetchPosts = () => {
     axios.get(`${API_URL}/posts`).then(res => setPosts(res.data)).catch((e) => {
@@ -347,7 +363,7 @@ export function PostsPage() {
             const keywordOk = seo.keywordCount >= 3 && seo.keywordCount <= 6;
 
             return (
-              <Card key={post.id} className="p-4">
+              <Card key={post.id} id={`post-${post.id}`} className="scroll-mt-6 p-4">
                 {/* 머리: 플랫폼·상태·제목 + 보기/수정/삭제 */}
                 <div className="mb-3 flex flex-col gap-3 border-b border-line pb-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0 flex-1">

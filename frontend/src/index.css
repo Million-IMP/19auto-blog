@@ -42,6 +42,9 @@
   --spacing-gutter: 1rem;
   --spacing-section: 1.5rem;
 
+  /* 편집국 제목체: 페이지 제목·큰 숫자·헤드라인에만 쓴다 (본문은 sans) */
+  --font-display: "Noto Serif KR", "Nanum Myeongjo", "AppleMyungjo", Georgia, serif;
+
   --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
 }
 
@@ -148,4 +151,49 @@
   input[type='checkbox'] {
     accent-color: var(--color-accent);
   }
+}
+
+/*
+ * 편집국 보드의 흐름선: 앞 단계에 쌓인 글이 있으면 다음 단계로 점이 흘러간다.
+ * .flow-line에 data-live="true"일 때만 움직인다.
+ */
+.flow-line {
+  position: relative;
+  height: 2px;
+  background: var(--color-line-strong);
+  overflow: hidden;
+}
+.flow-line[data-live='true'] {
+  background: repeating-linear-gradient(90deg, var(--color-accent) 0 6px, transparent 6px 14px);
+  background-size: 14px 2px;
+  animation: flow-dash 0.9s linear infinite;
+}
+@keyframes flow-dash {
+  to { background-position: 14px 0; }
+}
+
+/* 지금 손댈 단계의 점: 천천히 숨쉬듯 번진다 */
+.pulse-dot {
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent) 55%, transparent);
+  animation: pulse-ring 1.8s ease-out infinite;
+}
+@keyframes pulse-ring {
+  to { box-shadow: 0 0 0 10px transparent; }
+}
+
+/* 명령창 등장 */
+.palette-scrim { animation: fade-in 120ms ease-out; }
+.palette-panel { animation: rise-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes fade-in { from { opacity: 0; } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(-8px) scale(0.985); } }
+
+/* 보드 카드가 처음 보일 때 순서대로 올라온다 */
+.stagger > * { animation: rise-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.stagger > *:nth-child(2) { animation-delay: 40ms; }
+.stagger > *:nth-child(3) { animation-delay: 80ms; }
+.stagger > *:nth-child(4) { animation-delay: 120ms; }
+.stagger > *:nth-child(5) { animation-delay: 160ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-line[data-live='true'], .pulse-dot, .palette-scrim, .palette-panel, .stagger > * { animation: none; }
 }
