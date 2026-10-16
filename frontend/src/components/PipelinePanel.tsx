@@ -63,7 +63,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
         {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />} {title}
       </button>
       {open && (
-        <div className="prose prose-xs prose-invert max-w-none text-xs mt-2 bg-surface-2 p-3 rounded-control border border-line">
+        <div className="prose prose-xs max-w-none text-xs mt-2 bg-surface-2 p-3 rounded-control border border-line">
           {children}
         </div>
       )}

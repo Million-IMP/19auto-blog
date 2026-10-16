@@ -143,6 +143,15 @@ export function DashboardPage() {
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // '지금 한 바퀴'는 응답이 올 때까지 단계별 진행을 알 수 없어서, 지난 시간만 보여준다
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!running) return;
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 1000);
+    return () => window.clearInterval(timer);
+  }, [running]);
 
   const dirty = Boolean(auto && savedAuto && JSON.stringify(auto) !== JSON.stringify(savedAuto));
 
@@ -198,8 +207,9 @@ export function DashboardPage() {
   };
 
   const runAuto = async () => {
+    setElapsed(0);
     setRunning(true);
-    setAutoMsg('수집을 확인하고 초안을 작성하는 중입니다.');
+    setAutoMsg('수집을 확인하고 초안을 작성하는 중입니다. 최대 3분까지 걸릴 수 있습니다.');
     try {
       const r = await axios.post(`${API_URL}/automation/run`, undefined, { timeout: 180000 });
       const body = r.data;
@@ -241,7 +251,7 @@ export function DashboardPage() {
         actions={
           <>
             <Button icon={<Settings size={15} />} onClick={() => setSettingsOpen((v) => !v)}>설정</Button>
-            <Button variant="primary" icon={<Play size={15} />} onClick={runAuto} disabled={running}>{running ? '작성 중...' : '지금 한 바퀴'}</Button>
+            <Button variant="primary" icon={<Play size={15} />} onClick={runAuto} disabled={running}>{running ? `작성 중... ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}` : '지금 한 바퀴'}</Button>
           </>
         }
       />

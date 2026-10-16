@@ -421,7 +421,7 @@ export function PostsPage() {
                 ) : (
                   <div
                     id={`post-preview-${post.id}`}
-                    className={cn('prose prose-sm prose-invert max-w-none [overflow-wrap:anywhere] rounded-control border border-line bg-surface-2 p-4 text-sm leading-relaxed text-ink', rawViewIds.includes(post.id) && 'whitespace-pre-wrap')}
+                    className={cn('prose prose-sm max-w-none [overflow-wrap:anywhere] rounded-control border border-line bg-surface-2 p-4 text-sm leading-relaxed text-ink', rawViewIds.includes(post.id) && 'whitespace-pre-wrap')}
                   >
                     {!rawViewIds.includes(post.id) ? (
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>

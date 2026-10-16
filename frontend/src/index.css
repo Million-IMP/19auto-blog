@@ -45,7 +45,32 @@
   --font-sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
 }
 
-/* 부분 테마: 이 클래스를 붙인 영역 안에서만 토큰 값이 바뀐다 (수집함 리더의 라이트/페이퍼 모드) */
+/*
+ * 스킨: <html>에 붙이면 사이트 전체, 요소에 붙이면 그 영역 안에서만 토큰 값이 바뀐다.
+ * 사이트 전체는 components/layout/theme.tsx의 ThemeSwitcher, 수집함 리더는 자체 스위처가 붙인다.
+ * .theme-dark 값은 위 @theme 기본값과 같게 유지한다 (밝은 영역 안에 다시 어두운 영역을 넣을 때 필요).
+ */
+.theme-dark {
+  color-scheme: dark;
+  --color-canvas: #0f1216;
+  --color-surface: #161a20;
+  --color-surface-2: #1d222a;
+  --color-surface-3: #252b35;
+  --color-line: #262c35;
+  --color-line-strong: #343c48;
+  --color-ink: #e8ebef;
+  --color-ink-2: #a5adb9;
+  --color-ink-3: #6b7480;
+  --color-accent: #2dd4bf;
+  --color-accent-strong: #5eead4;
+  --color-accent-ink: #062a26;
+  --color-draft: #fbbf24;
+  --color-published: #4ade80;
+  --color-danger: #f87171;
+  --color-info: #60a5fa;
+  --shadow-card: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 6px 20px rgb(0 0 0 / 0.25);
+  --shadow-pop: 0 12px 40px rgb(0 0 0 / 0.5);
+}
 .theme-light {
   color-scheme: light;
   --color-canvas: #f4f5f7;
@@ -64,6 +89,8 @@
   --color-published: #15803d;
   --color-danger: #dc2626;
   --color-info: #2563eb;
+  --shadow-card: 0 1px 2px rgb(16 24 40 / 0.06), 0 4px 12px rgb(16 24 40 / 0.05);
+  --shadow-pop: 0 12px 40px rgb(16 24 40 / 0.18);
 }
 .theme-paper {
   color-scheme: light;
@@ -83,6 +110,29 @@
   --color-published: #3f6b3a;
   --color-danger: #b42318;
   --color-info: #6b5a8e;
+  --shadow-card: 0 1px 2px rgb(60 40 20 / 0.08), 0 4px 12px rgb(60 40 20 / 0.06);
+  --shadow-pop: 0 12px 40px rgb(60 40 20 / 0.2);
+}
+
+/* 마크다운 본문(prose)도 스킨 토큰을 따른다. prose-invert는 쓰지 않는다. */
+.prose {
+  --tw-prose-body: var(--color-ink-2);
+  --tw-prose-headings: var(--color-ink);
+  --tw-prose-lead: var(--color-ink-2);
+  --tw-prose-links: var(--color-accent);
+  --tw-prose-bold: var(--color-ink);
+  --tw-prose-counters: var(--color-ink-3);
+  --tw-prose-bullets: var(--color-line-strong);
+  --tw-prose-hr: var(--color-line);
+  --tw-prose-quotes: var(--color-ink-2);
+  --tw-prose-quote-borders: var(--color-line-strong);
+  --tw-prose-captions: var(--color-ink-3);
+  --tw-prose-kbd: var(--color-ink);
+  --tw-prose-code: var(--color-ink);
+  --tw-prose-pre-code: var(--color-ink);
+  --tw-prose-pre-bg: var(--color-surface-3);
+  --tw-prose-th-borders: var(--color-line-strong);
+  --tw-prose-td-borders: var(--color-line);
 }
 
 @layer base {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Home, Inbox, Lightbulb, Archive, BookOpen, FileText, Activity, Menu, X } from 'lucide-react';
 import { cn } from '../ui';
+import { ThemeSwitcher } from './ThemeSwitcher';
 
 // 글 만드는 순서대로 나열한다. step은 페이지 제목 앞 번호와 같다.
 const NAV = [
@@ -45,6 +46,7 @@ function Rail({ pathname }: { pathname: string }) {
           );
         })}
       </nav>
+      <ThemeSwitcher className="mt-auto flex-col" />
     </aside>
   );
 }
@@ -125,6 +127,10 @@ function MobileNav({ pathname }: { pathname: string }) {
                 </Link>
               );
             })}
+            <div className="mt-auto flex items-center justify-between border-t border-line px-3 pt-3">
+              <span className="text-xs font-semibold text-ink-3">화면 색</span>
+              <ThemeSwitcher />
+            </div>
           </nav>
         </div>
       )}

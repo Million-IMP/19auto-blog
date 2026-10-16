@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Bot, RotateCcw, Rss, X, ExternalLink, Copy, BookOpen, Sparkles, Clock, Sun, Moon, FileText, CheckCheck } from 'lucide-react';
 import type { ParsedInboxItem } from './parseRssItem';
+import { getSiteTheme } from '../layout/siteTheme';
 
 const API_URL = '/api';
 
@@ -19,7 +20,7 @@ const [scrapedData, setScrapedData] = useState<any | null>(null);
 const [isScraping, setIsScraping] = useState(false);
 const [aiSummary, setAiSummary] = useState<{ bullets: string[]; takeaway: string; keywords: string[] } | null>(null);
 const [isSummarizing, setIsSummarizing] = useState(false);
-const [readerTheme, setReaderTheme] = useState<'light' | 'paper' | 'dark'>('dark');
+const [readerTheme, setReaderTheme] = useState<'light' | 'paper' | 'dark'>(getSiteTheme);
 const [fontSize, setFontSize] = useState<'sm' | 'base' | 'lg'>('base');
 const [contentTab, setContentTab] = useState<'full' | 'snippet'>('full');
 const [copiedLink, setCopiedLink] = useState(false);
@@ -93,7 +94,7 @@ const handleCopyLink = (url: string) => {
         <div 
           onClick={(e) => e.stopPropagation()} 
           className={`rounded-card shadow-pop max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden border transition-colors duration-200 animate-in zoom-in-95 duration-150 ${
-            readerTheme === 'paper' ? 'theme-paper' : readerTheme === 'light' ? 'theme-light' : ''
+            `theme-${readerTheme}`
           } bg-surface text-ink border-line`}
         >
           {/* 1. 최상단 실시간 독서 진행률 게이지 바 (Reading Progress Bar) */}
