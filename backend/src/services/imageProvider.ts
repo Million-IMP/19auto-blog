@@ -17,7 +17,7 @@ export type ImageRequest = {
   speed?: 'turbo' | 'default';
 };
 
-const BASE_NEGATIVE = 'text, letters, words, watermark, logo, signature, blurry, low quality, distorted hands, extra fingers, deformed face';
+const BASE_NEGATIVE = 'text, letters, words, numbers, digits, handwriting, watermark, logo, signature, blurry, low quality, distorted hands, extra fingers, deformed face';
 
 function fullPrompt(req: ImageRequest) {
   return [req.style, req.prompt, req.must ? `must include: ${req.must}` : ''].filter(Boolean).join('. ');
