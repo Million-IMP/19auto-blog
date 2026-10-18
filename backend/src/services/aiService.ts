@@ -20,6 +20,8 @@ export type Outline = {
 
 export type ImageScene = {
   h2?: string;
+  // 글 속 고유 대상. "한국어 원문 표현 / English visual description"
+  anchor?: string;
   point: string;
   scene: string;
   must: string;
@@ -28,14 +30,27 @@ export type ImageScene = {
   caption?: string;
   url?: string;
   seed?: number;
+  // 생성된 이미지의 관련성 점수(1~5)와 이유. 채점에 실패하면 없다.
+  score?: number;
+  scoreReason?: string;
+  // 채점을 시도했는지. 이어하기에서 같은 장면을 다시 채점하지 않는다.
+  checked?: boolean;
+  retried?: boolean;
 };
+
+export type ImageKind = 'news' | 'concept' | 'howto';
 
 export type ImagePlan = {
   style: string;
+  kind?: ImageKind;
   provider?: string;
+  // 이 글에서 점수가 낮아 다시 만든 장수
+  retries?: number;
   cover: ImageScene;
   sections: ImageScene[];
 };
+
+export type ImageInput = { data: string; mediaType: string } | { url: string };
 
 function parseJsonTag<T>(text: string, tag: string, label: string): T {
   const match = text.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`));
@@ -90,13 +105,25 @@ ${numbered(input.materialTemplates, '자유 형식')}
 ${numbered(input.ruleTemplates, '제한 없음')}`;
 }
 
-// 장면 계획 공통 규칙. 이미지 품질은 prompt의 구체성에서 나오고, 캡션은 본문에 그대로 실린다.
-const SCENE_RULES = `- prompt는 영어 한 단락으로, 다음 순서로 구체적으로 씁니다: 중심 피사체 1개와 행동 → 구도·카메라(shot type, angle, lens) → 조명 → 색감 → 질감·디테일 → 분위기. 스타일 문장은 prompt에 다시 쓰지 않습니다.
-  예: "a single robotic arm carefully stacking wooden blocks on a workbench, medium shot, slightly low angle, 35mm lens, soft window light from the left, muted teal and warm orange tones, fine surface textures, calm and focused mood, generous negative space on the right"
-- 화면에는 중심 피사체 1개를 두고 블로그 썸네일로 잘려도 되도록 여백을 둡니다. 손·얼굴 클로즈업과 군중 장면은 피합니다(왜곡이 잦음).
-- 이미지 안에 글자·숫자·로고·도표를 넣지 않습니다. 실제 인물이나 상표를 그리지 않습니다.
-- must는 반드시 보여야 할 요소, avoid는 나오면 안 되는 요소를 영어 쉼표 목록으로 씁니다.
+// Design Ref: §5.1 — 장면은 은유가 아니라 글 속 실제 대상(anchor)에서 출발한다. 캡션은 본문에 그대로 실린다.
+// 예시 문장에 색·재질을 넣으면 그대로 결과에 섞이므로(#44에서 확인) 예시는 장면 구성만 보여준다.
+const SCENE_RULES = `- 먼저 anchor를 정합니다: 그 소제목 본문에 실제로 나오는 고유 대상(제품·서비스·기기·앱 화면·장소·사람의 행동). 형식은 "한국어 원문 표현 / English visual description"입니다. 제품은 상표 대신 생김새로 묘사합니다.
+- prompt는 영어 한 단락으로, 다음 순서로 씁니다: anchor와 그 행동·상태 → 장소·맥락 → shot type·angle·lens → 조명 → 분위기. 화풍·색·재질은 style에서 정하므로 prompt에 쓰지 않습니다.
+  예: "a person seen from behind adjusting settings on a laptop at a home desk, the screen showing a blurred unreadable dashboard, a small smart home hub on the shelf beside it, medium shot, eye level, 35mm lens, soft window light from the left, calm focused mood, negative space on the right"
+- 사람은 뒷모습·옆모습·기기를 다루는 손까지 그릴 수 있습니다. 얼굴 클로즈업과 군중 장면은 피합니다(왜곡이 잦음).
+- 앱·웹 화면이 필요하면 "blurred, unreadable interface"로 씁니다. 이미지 안에 읽히는 글자·숫자·로고·도표, 실제 인물, 실제 상표를 넣지 않습니다.
+- 은유(열쇠·돋보기·저울·실타래 같은 상징물)는 anchor가 순수한 개념일 때만 씁니다. 그때도 글에 나오는 구체 사물이나 상황을 함께 둡니다. 한 글 안에서 같은 소재를 반복하지 않습니다.
+- 블로그 썸네일로 잘려도 되도록 여백을 둡니다.
+- must에는 anchor의 영어 묘사를 반드시 넣고, 반드시 보여야 할 요소를 영어 쉼표 목록으로 씁니다. avoid는 나오면 안 되는 요소를 영어 쉼표 목록으로 씁니다.
 - caption은 이미지 아래에 실리는 한국어 설명 1문장(40자 안팎)입니다. 이미지가 보여주는 것과 그 소제목의 뜻을 잇습니다. 수치나 본문에 없는 사실은 쓰지 않습니다.`;
+
+// Design Ref: §5.2 — 정해진 스타일이 없으면 글 종류에 맞춰 화풍을 고른다.
+const STYLE_GUIDE = `- kind는 글 종류입니다: news(제품·서비스·사건 소개), howto(설치·설정·방법 안내), concept(개념·원리 해설).
+- 정해진 스타일이 없으면 kind에 맞춰 화풍을 고릅니다.
+  news → 사실적인 에디토리얼 사진풍(realistic editorial photography, natural light)
+  howto → 실제 작업 환경 사진풍(realistic hands-on setup photography)
+  concept → 깔끔한 에디토리얼 일러스트(clean editorial illustration)
+- style은 영어 한 문장으로 화풍·색 팔레트·조명·렌더링 품질을 씁니다. 색 팔레트는 이 글의 주제와 톤에서 새로 고릅니다.`;
 
 // 요청 단위 마감 시각. Vercel 함수 제한 안에서 AI 호출이 끝나지 않으면 시간 초과 오류로 멈추고 이어하기로 재개한다.
 const deadlineStore = new AsyncLocalStorage<number>();
@@ -423,16 +450,15 @@ ${input.content.slice(0, 6000)}
 
 [원칙]
 - 한 글에는 스타일 하나만 씁니다. 정해진 스타일이 있으면 그대로 씁니다.
-- style은 영어 한 문장으로 화풍·색 팔레트·조명·렌더링 품질을 구체적으로 씁니다. 아래 예시는 형식만 참고하고, 화풍과 색은 글의 주제와 톤에 맞게 새로 고릅니다.
-  형식 예:"editorial 3D illustration, soft clay materials, muted teal and warm orange palette, soft volumetric studio lighting, high detail, clean composition"
-- 표지 1장은 글 전체의 의미를, 소제목 이미지는 그 소제목 본문이 설명하는 장면을 보여줍니다. 제목 단어만 보고 고르지 않습니다.
+${STYLE_GUIDE}
+- 표지 1장은 글의 핵심 대상(글 전체가 다루는 제품·서비스·주제)을, 소제목 이미지는 그 소제목 본문이 설명하는 실제 장면을 보여줍니다. 제목 단어만 보고 고르지 않습니다.
 - 장면끼리 구도와 소재가 겹치지 않게 합니다.
 ${SCENE_RULES}
 - sections의 h2는 소제목 목록의 문구를 글자 그대로 씁니다.
 
 아래 형식의 JSON만 <plan> 태그 안에 출력하세요.
 <plan>
-{"style": "...", "cover": {"point": "전달할 뜻(한국어)", "scene": "장면(한국어)", "must": "필수 요소(영어)", "avoid": "제외 요소(영어)", "prompt": "...", "caption": "..."}, "sections": [{"h2": "...", "point": "...", "scene": "...", "must": "...", "avoid": "...", "prompt": "...", "caption": "..."}]}
+{"kind": "news|howto|concept", "style": "...", "cover": {"anchor": "한국어 원문 표현 / English description", "point": "전달할 뜻(한국어)", "scene": "장면(한국어)", "must": "필수 요소(영어)", "avoid": "제외 요소(영어)", "prompt": "...", "caption": "..."}, "sections": [{"h2": "...", "anchor": "...", "point": "...", "scene": "...", "must": "...", "avoid": "...", "prompt": "...", "caption": "..."}]}
 </plan>
 `;
     const text = await askText(prompt, 8000);
@@ -440,6 +466,7 @@ ${SCENE_RULES}
     if (!plan.style || !plan.cover?.prompt || !Array.isArray(plan.sections)) {
       throw new Error('이미지 계획에 스타일이나 표지가 없습니다.');
     }
+    if (!['news', 'concept', 'howto'].includes(plan.kind as string)) delete plan.kind;
     return plan;
   },
 
@@ -458,10 +485,56 @@ ${input.avoidPrompts.map((p) => `- ${p}`).join('\n')}
 
 ${SCENE_RULES}
 <scene>
-{"h2": "${input.h2}", "point": "...", "scene": "...", "must": "...", "avoid": "...", "prompt": "...", "caption": "..."}
+{"h2": "${input.h2}", "anchor": "...", "point": "...", "scene": "...", "must": "...", "avoid": "...", "prompt": "...", "caption": "..."}
 </scene>
 `;
     return parseJsonTag<ImageScene>(await askText(prompt, 1500), 'scene', '장면 계획');
+  },
+
+  // Design Ref: §5.3 — 생성된 이미지를 보고 소제목·anchor와 맞는지 1~5점으로 채점한다.
+  async scoreImage(input: { image: ImageInput; h2: string; point: string; anchor: string }) {
+    const deadline = deadlineStore.getStore() ?? Infinity;
+    const remaining = deadline - Date.now();
+    if (remaining < 5_000) throw new Error('남은 실행 시간이 부족합니다.');
+    const source: Anthropic.ImageBlockParam['source'] =
+      'url' in input.image
+        ? { type: 'url', url: input.image.url }
+        : { type: 'base64', media_type: input.image.mediaType as 'image/png', data: input.image.data };
+    const prompt = `
+블로그 이미지가 글 내용과 맞는지 채점하세요.
+
+[소제목] ${input.h2}
+[전달할 뜻] ${input.point}
+[보여야 할 대상] ${input.anchor || '(없음 — 소제목 뜻으로 판단)'}
+
+[채점 기준]
+5: 보여야 할 대상이 분명히 보이고 소제목 뜻과 맞음
+4: 대상이 보이고 뜻이 대체로 맞음
+3: 주제는 관련 있으나 대상이 흐리거나 일부만 보임
+2: 일반적인 그림이나 상징물뿐, 대상이 없음
+1: 내용과 무관하거나, 손·얼굴 왜곡 또는 읽히는 글자가 크게 보임
+
+아래 형식의 JSON만 <score> 태그 안에 출력하세요. 다른 설명은 쓰지 않습니다. reason은 무엇이 보이고 무엇이 빠졌는지 한국어 한 문장(60자 이내)입니다.
+<score>{"score": 4, "reason": "..."}</score>
+`;
+    // 한국어 이유가 길어지면 300토큰에서 잘려 JSON이 깨졌다(실측). 여유를 두고, 잘리면 원인을 오류로 남긴다.
+    const response = await anthropic.messages.create(
+      {
+        model: AI_MODEL,
+        max_tokens: 1024,
+        messages: [{ role: 'user', content: [{ type: 'image', source }, { type: 'text', text: prompt }] }],
+      },
+      Number.isFinite(remaining) ? { timeout: Math.min(remaining - 2_000, 30_000), maxRetries: 0 } : undefined
+    );
+    const textBlock = response.content.find((block: any) => block.type === 'text') as any;
+    if (!textBlock?.text) {
+      throw new Error(`이미지 채점 응답에 글이 없습니다 (stop_reason=${response.stop_reason}, blocks=${response.content.map((b: any) => b.type).join(',')})`);
+    }
+    if (response.stop_reason === 'max_tokens') throw new Error('이미지 채점 응답이 길이 제한에서 잘렸습니다.');
+    const result = parseJsonTag<{ score: number; reason: string }>(textBlock.text, 'score', '이미지 채점');
+    const score = Number(result.score);
+    if (!Number.isInteger(score) || score < 1 || score > 5) throw new Error(`이미지 채점 점수가 1~5가 아닙니다: ${result.score}`);
+    return { score, reason: String(result.reason || '').slice(0, 200) };
   },
 
   // 글감 보드: 수집 항목 하나를 독자 질문·의도·빈틈·다음 행동으로 평가. 검색량·순위는 추정하지 않는다.

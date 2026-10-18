@@ -7,7 +7,7 @@ import { getAutomationConfig, runAutomationCycle, updateAutomationConfig } from 
 import { resolveDraftInputs } from './services/writingPlan';
 import { markPublished, verifyPublished } from './services/publishService';
 import { draftFromTopic, evaluateInbox, TOPIC_STATUSES, updateTopic } from './services/topicService';
-import { advancePost, createPipelinePost, getBlogProfile, regenerateImage, requestDeadline, resumePost, updateBlogProfile } from './services/draftPipeline';
+import { advancePost, createPipelinePost, getBlogProfile, PipelineError, rebuildImageSet, regenerateImage, requestDeadline, resumePost, updateBlogProfile } from './services/draftPipeline';
 import { createFeedback, deleteFeedback, listFeedback, parseFeedback } from './services/feedbackService';
 import { prisma } from './db';
 import { authStatus, login, logout, requireAdmin } from './auth';
@@ -588,10 +588,26 @@ app.post('/api/posts/:id/resume', async (req, res) => {
 
 // 3.0.3 이미지 한 장만 다시 생성 (0 = 표지, 1.. = 소제목 순서)
 app.post('/api/posts/:id/images/:index/regenerate', async (req, res) => {
+  const id = Number(req.params.id);
+  const index = Number(req.params.index);
+  if (!Number.isInteger(id) || id < 1 || !Number.isInteger(index) || index < 0) {
+    return res.status(400).json({ error: '잘못된 글 번호 또는 장면 번호입니다.' });
+  }
   try {
-    res.json(await withDeadline(requestDeadline(), () => regenerateImage(Number(req.params.id), Number(req.params.index))));
+    res.json(await withDeadline(requestDeadline(), () => regenerateImage(id, index)));
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res.status(error instanceof PipelineError ? error.status : 500).json({ error: error.message });
+  }
+});
+
+// 3.0.3-1 이미지 세트 전체를 새 계획으로 다시 만들기 (본문의 AI 이미지를 지우고 IMAGES 단계부터 다시)
+app.post('/api/posts/:id/images/rebuild', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: '잘못된 글 번호입니다.' });
+  try {
+    res.json(await rebuildImageSet(id, requestDeadline()));
+  } catch (error: any) {
+    res.status(error instanceof PipelineError ? error.status : 500).json({ error: error.message });
   }
 });
 

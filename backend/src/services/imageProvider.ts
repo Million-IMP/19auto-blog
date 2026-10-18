@@ -13,6 +13,8 @@ export type ImageRequest = {
   seed: number;
   must?: string;
   avoid?: string;
+  // Ideogram 렌더링 속도. 없으면 IDEOGRAM_RENDERING_SPEED(기본 turbo). 점수가 낮아 다시 만들 때만 품질을 올린다.
+  speed?: 'turbo' | 'default';
 };
 
 const BASE_NEGATIVE = 'text, letters, words, watermark, logo, signature, blurry, low quality, distorted hands, extra fingers, deformed face';
@@ -21,7 +23,8 @@ function fullPrompt(req: ImageRequest) {
   return [req.style, req.prompt, req.must ? `must include: ${req.must}` : ''].filter(Boolean).join('. ');
 }
 
-export type RenderedImage = { url: string; provider: string };
+// data: 이미 내려받은 이미지(채점에 그대로 쓴다). pollinations처럼 주소만 있는 공급자는 비워 둔다.
+export type RenderedImage = { url: string; provider: string; data?: Buffer; mediaType?: string };
 
 type ImageProvider = {
   name: string;
@@ -32,7 +35,8 @@ type ImageProvider = {
 const pollinations: ImageProvider = {
   name: 'pollinations',
   async render(req) {
-    const prompt = encodeURIComponent(`${fullPrompt(req)}. no text, no letters, no logo`);
+    // 괄호까지 인코딩해야 본문 마크다운 ![..](주소)가 주소 중간에서 끊기지 않는다.
+    const prompt = encodeURIComponent(`${fullPrompt(req)}. no text, no letters, no logo`).replace(/[()]/g, (c) => (c === '(' ? '%28' : '%29'));
     return {
       url: `https://image.pollinations.ai/prompt/${prompt}?width=${req.width}&height=${req.height}&seed=${req.seed}&nologo=true`,
       provider: 'pollinations',
@@ -76,12 +80,19 @@ function ideogramError(status: number, body: string) {
   return new Error(`Ideogram ${status}: ${hint[status] || detail}`);
 }
 
+// 다운로드·저장도 남은 실행 시간 안에서 끝낸다. 시간이 넘으면 이 장면은 실패로 두고 다음 실행이 다시 만든다.
+function stepTimeout(max: number) {
+  const timeout = Math.min(max, remainingTime() - 2_000);
+  if (timeout < 1_000) throw new Error('남은 실행 시간이 부족합니다. 다음 실행에서 이어갑니다.');
+  return timeout;
+}
+
 // Vercel Blob 토큰이 있으면 Blob에, 로컬이면 backend/generated-images에 저장한다.
 async function storeImage(bytes: Buffer, contentType: string) {
   const ext = contentType.includes('jpeg') ? 'jpg' : contentType.includes('webp') ? 'webp' : 'png';
   const name = `${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`;
   if (process.env.BLOB_READ_WRITE_TOKEN) {
-    const blob = await put(`post-images/${name}`, bytes, { access: 'public', contentType });
+    const blob = await put(`post-images/${name}`, bytes, { access: 'public', contentType, abortSignal: AbortSignal.timeout(stepTimeout(15_000)) });
     return blob.url;
   }
   if (process.env.VERCEL) {
@@ -101,7 +112,7 @@ const ideogram: ImageProvider = {
     // 계획 단계에서 이미 구체적인 prompt를 만들므로, 자동 재작성은 꺼서 한 글 안의 스타일이 흔들리지 않게 한다.
     form.append('magic_prompt', (process.env.IDEOGRAM_MAGIC_PROMPT || 'off').toLowerCase());
     form.append('aspect_ratio', closestAspectRatio(req.width, req.height));
-    form.append('rendering_speed', (process.env.IDEOGRAM_RENDERING_SPEED || 'turbo').toLowerCase());
+    form.append('rendering_speed', (req.speed || process.env.IDEOGRAM_RENDERING_SPEED || 'turbo').toLowerCase());
     form.append('seed', String(req.seed));
     form.append('num_images', '1');
 
@@ -120,11 +131,12 @@ const ideogram: ImageProvider = {
     const image = JSON.parse(body).data?.[0];
     if (!image?.url) throw new Error('Ideogram이 이미지를 돌려주지 않았습니다(안전 검사 미통과일 수 있음). 이 장면만 다시 생성해보세요.');
 
-    const download = await fetch(image.url, { signal: AbortSignal.timeout(20_000) });
+    const download = await fetch(image.url, { signal: AbortSignal.timeout(stepTimeout(20_000)) });
     if (!download.ok) throw new Error(`Ideogram 이미지 다운로드 실패: ${download.status}`);
     const contentType = download.headers.get('content-type') || 'image/png';
-    const url = await storeImage(Buffer.from(await download.arrayBuffer()), contentType);
-    return { url, provider: 'ideogram' };
+    const data = Buffer.from(await download.arrayBuffer());
+    const url = await storeImage(data, contentType);
+    return { url, provider: 'ideogram', data, mediaType: contentType };
   },
 };
 
