@@ -5,12 +5,12 @@
 
 ## 진행 상황
 
-- [x] 1. 계획서 (plan) — `docs/01-plan/features/image-relevance.plan.md` (2026-10-17)
-- [x] 2. 설계서 (design) — `docs/02-design/features/image-relevance.design.md` (C안, 2026-10-18)
+- [x] 1. 계획서 (plan) — `docs/archive/2026-10/image-relevance/image-relevance.plan.md` (2026-10-17)
+- [x] 2. 설계서 (design) — `docs/archive/2026-10/image-relevance/image-relevance.design.md` (C안, 2026-10-18)
 - [x] 3. 구현 + 실제 확인 (do) — 브랜치 `feat/image-relevance`, #44 실측 평균 4.0 (2026-10-18)
-- [x] 4. 검수 (analyze) — 일치율 94.8% → 수정 후 99.2%, `docs/03-analysis/image-relevance.analysis.md` (2026-10-18)
-- [x] 5. 보고서 + PR (report) — `docs/04-report/image-relevance.report.md` (2026-10-18)
-- [ ] 6. 머지 + 보관 (직접 요청할 때만)
+- [x] 4. 검수 (analyze) — 일치율 94.8% → 수정 후 99.2%, `docs/archive/2026-10/image-relevance/image-relevance.analysis.md` (2026-10-18)
+- [x] 5. 보고서 + PR (report) — `docs/archive/2026-10/image-relevance/image-relevance.report.md` (2026-10-18)
+- [x] 6. 머지 + 보관 (직접 요청할 때만) — PR #19 머지, #42~#44 운영 재생성(3.71·4.00·4.00), 보관 (2026-10-18)
 
 ---
 
