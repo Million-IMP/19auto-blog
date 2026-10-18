@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { aiService, type ImagePlan, type ImageScene } from './aiService';
-import { anchorEnglish, needsRetry, retryPrompt, scoreScene, stripAiImages, stripStyleWords } from './imageQuality';
+import { anchorEnglish, hasListedAnchor, needsRetry, retryPrompt, scoreScene, stripAiImages, stripStyleWords } from './imageQuality';
 
 function scene(overrides: Partial<ImageScene> = {}): ImageScene {
   return { point: '뜻', scene: '', must: 'smart home hub', avoid: '', prompt: 'a hub on a shelf', ...overrides };
@@ -120,5 +120,25 @@ describe('scoreScene · 이미지 형식', () => {
     const spy = vi.spyOn(aiService, 'scoreImage').mockResolvedValue({ score: 4, reason: '' });
     await scoreScene(scene(), { url: '/api/images/1.png', data: Buffer.from('x'), mediaType: 'image/JPEG; charset=binary' });
     expect(spy.mock.calls[0][0].image).toEqual({ data: Buffer.from('x').toString('base64'), mediaType: 'image/jpeg' });
+  });
+});
+
+describe('hasListedAnchor', () => {
+  it.each([
+    ['블루투스·LAN·인터넷 연결 / a router and cables', true],
+    ['암호화, 기기 인증 / a lock icon', true],
+    ['암호화 및 기기 인증 / a lock icon', true],
+    ['노트북에 꽂힌 LAN 케이블 / a laptop, a cable', false],
+    ['신호와 간섭의 비율 / two overlapping waves', false],
+    [undefined, false],
+    ['송·수신 안테나 / an antenna', false],
+    ['입·출력 단자 / ports on a device', false],
+    ['암호화 · 기기 인증 / a lock', true],
+    ['블루투스ㆍ와이파이 / a router', true],
+    ['블루투스，와이파이 / a router', true],
+    ['a router, cables / 공유기', false],
+    ['TCP/IP 설정 화면 / a, b', false],
+  ])('%s → %s', (anchor, expected) => {
+    expect(hasListedAnchor(scene({ anchor }))).toBe(expected);
   });
 });
