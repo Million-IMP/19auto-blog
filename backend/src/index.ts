@@ -738,7 +738,7 @@ const LOG_KINDS: Record<string, object> = {
   auto: { OR: [{ event: { startsWith: 'CRON_RSS' } }, { event: 'CRON_AUTO_PIPELINE' }] },
   manual: { event: { startsWith: 'MANUAL_' } },
   post: { event: { startsWith: 'POST_' } },
-  error: { event: { in: ['CRON_ERROR', 'POST_STAGE_ERROR'] } },
+  error: { event: { in: ['CRON_ERROR', 'POST_STAGE_ERROR', 'AI_TOKEN_NEAR_LIMIT'] } },
 };
 
 app.get('/api/system-logs', async (req, res) => {

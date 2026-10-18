@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'async_hooks';
 import Anthropic from '@anthropic-ai/sdk';
 import dotenv from 'dotenv';
 import * as cheerio from 'cheerio';
+import { isNearLimit, recordNearLimit } from './aiUsageLog';
 
 dotenv.config();
 
@@ -139,8 +140,20 @@ export function remainingTime() {
   return (deadlineStore.getStore() ?? Infinity) - Date.now();
 }
 
+// Design Ref: ai-token-warning §2.1 — 모든 AI 응답이 거친다. 출력(생각 토큰 포함)이 제한에 가까우면 기록하고, 잘렸으면 오류.
+// 잘린 응답을 그대로 쓰면 반쯤 쓴 글이 저장된다(OSMU·요약·수집 처리는 이전에 확인하지 않았다).
+export async function checkResponse(name: string, response: Anthropic.Message, maxTokens: number, options: { throwOnCut?: boolean } = {}) {
+  const used = response.usage?.output_tokens ?? 0;
+  const cut = response.stop_reason === 'max_tokens';
+  if (cut || isNearLimit(used, maxTokens)) await recordNearLimit(name, used, maxTokens, cut);
+  if ((options.throwOnCut ?? true) && cut) {
+    throw new Error(`AI 응답이 길이 제한(${maxTokens} 토큰)에서 잘렸습니다.`);
+  }
+}
+
+// name: 길이 경고에 남는 호출 이름(aiService 메서드 이름).
 // cachedPrefix: 여러 단계가 똑같이 보내는 자료 블록. 프롬프트 맨 앞에 두고 캐시해서 다음 단계는 싸게 읽는다.
-async function askText(prompt: string, maxTokens: number, cachedPrefix?: string) {
+async function askText(name: string, prompt: string, maxTokens: number, cachedPrefix?: string) {
   const deadline = deadlineStore.getStore() ?? Infinity;
   const remaining = deadline - Date.now();
   if (remaining < 5_000) throw new Error('남은 실행 시간이 부족합니다. 다음 실행에서 이어갑니다.');
@@ -158,10 +171,11 @@ async function askText(prompt: string, maxTokens: number, cachedPrefix?: string)
     },
     Number.isFinite(remaining) ? { timeout: remaining - 2_000, maxRetries: 0 } : undefined
   );
+  // 생각만 하다 잘리면 글이 비어 있으므로, 잘림을 먼저 확인해 원인이 보이게 한다.
+  await checkResponse(name, response, maxTokens);
   const textBlock = response.content.find((block: any) => block.type === 'text') as any;
   const text = textBlock?.text || '';
   if (!text) throw new Error('AI 응답이 비어 있습니다.');
-  if (response.stop_reason === 'max_tokens') throw new Error(`AI 응답이 길이 제한(${maxTokens} 토큰)에서 잘렸습니다.`);
   if (cachedPrefix) {
     const { cache_read_input_tokens: read, cache_creation_input_tokens: written, input_tokens: fresh } = response.usage;
     console.log(`[AI] 캐시 읽음 ${read ?? 0} · 캐시 저장 ${written ?? 0} · 일반 입력 ${fresh}`);
@@ -256,7 +270,7 @@ ${pages.map((page, i) => `[글 ${i + 1}]\n${page.text}`).join('\n\n')}
 `;
 
     // 여러 글 비교는 섹션이 셋이라 한국어 출력이 길다. 3000 토큰에서 잘리는 것을 확인함.
-    const resultText = await askText(prompt, pages.length === 1 ? 3000 : 6000);
+    const resultText = await askText('extractMaterialStructure', prompt, pages.length === 1 ? 3000 : 6000);
 
     const titleMatch = resultText.match(/<title>([\s\S]*?)<\/title>/);
     const contentMatch = resultText.match(/<content>([\s\S]*?)<\/content>/);
@@ -309,6 +323,7 @@ ${extraContext}
       system: "You are a helpful assistant that only outputs strictly formatted XML.",
       messages: [{ role: 'user', content: prompt }],
     });
+    await checkResponse('processInboxItem', response, 4000);
 
     const textBlock = response.content.find((block: any) => block.type === 'text') as any;
     const text = textBlock?.text || '';
@@ -357,7 +372,7 @@ ${input.keyword || '없음 (자료에서 독자가 실제로 검색할 핵심어
 {"keyword": "...", "title": "...", "sections": [{"h2": "...", "answer": "...", "needsSource": false}]}
 </outline>
 `;
-    const text = await askText(prompt, 3000, contextBlock(input));
+    const text = await askText('generateOutline', prompt, 3000, contextBlock(input));
     const outline = parseJsonTag<Outline>(text, 'outline', '목차');
     outline.sections = Array.isArray(outline.sections)
       ? outline.sections.filter((s) => typeof s?.h2 === 'string' && s.h2.trim() && typeof s.answer === 'string')
@@ -394,7 +409,7 @@ ${input.outline.sections.map((s, i) => `${i + 1}. ## ${s.h2}\n   먼저 답할 �
 ...
 </content>
 `;
-    const text = await askText(prompt, 8000, contextBlock(input));
+    const text = await askText('generateBody', prompt, 8000, contextBlock(input));
     const match = text.match(/<content>([\s\S]*?)<\/content>/);
     const content = (match ? match[1] : text).trim();
     if (content.length < 200) throw new Error('본문 응답이 너무 짧습니다.');
@@ -427,7 +442,7 @@ ${content}
 - 수정 전 → 수정 후 (대표 사례 최대 3개)
 </notes>
 `;
-    const text = await askText(prompt, 10000);
+    const text = await askText('polishBody', prompt, 10000);
     const contentMatch = text.match(/<content>([\s\S]*?)<\/content>/);
     const notesMatch = text.match(/<notes>([\s\S]*?)<\/notes>/);
     const polished = contentMatch ? contentMatch[1].trim() : '';
@@ -465,7 +480,7 @@ ${SCENE_RULES}
 </plan>
 `;
     // 모델이 답 앞에 생각(thinking)을 쓰고 그 토큰도 길이 제한에 포함된다. 7장면 계획이 5.5~8.5천 토큰이라 8000에서 4번 중 1번 잘렸다(v2 실측).
-    const text = await askText(prompt, 16000);
+    const text = await askText('planImages', prompt, 16000);
     const plan = parseJsonTag<ImagePlan>(text, 'plan', '이미지 계획');
     if (!plan.style || !plan.cover?.prompt || !Array.isArray(plan.sections)) {
       throw new Error('이미지 계획에 스타일이나 표지가 없습니다.');
@@ -494,7 +509,7 @@ ${SCENE_RULES}
 </scene>
 `;
     // 생각(thinking) 토큰까지 들어가도록 계획 한 장면 분량보다 넉넉하게 둔다.
-    return parseJsonTag<ImageScene>(await askText(prompt, 4000), 'scene', '장면 계획');
+    return parseJsonTag<ImageScene>(await askText('replanScene', prompt, 4000), 'scene', '장면 계획');
   },
 
   // Design Ref: §5.3 — 생성된 이미지를 보고 소제목·anchor와 맞는지 1~5점으로 채점한다.
@@ -538,6 +553,8 @@ ${SCENE_RULES}
       },
       Number.isFinite(remaining) ? { timeout: Math.min(remaining - 2_000, 30_000), maxRetries: 0 } : undefined
     );
+    // 잘림 오류는 아래 채점 전용 문구를 쓴다.
+    await checkResponse('scoreImage', response, 1024, { throwOnCut: false });
     const textBlock = response.content.find((block: any) => block.type === 'text') as any;
     if (!textBlock?.text) {
       throw new Error(`이미지 채점 응답에 글이 없습니다 (stop_reason=${response.stop_reason}, blocks=${response.content.map((b: any) => b.type).join(',')})`);
@@ -580,7 +597,7 @@ ${input.existingPosts.length > 0 ? input.existingPosts.map((p) => `${p.id} · ${
 {"keyword": "...", "topic": "주제 묶음", "question": "...", "intent": "...", "journey": "...", "why": "...", "gap": "...", "myValue": "...", "nextStep": "NEW_POST", "relatedPostId": null, "hypotheses": ["..."]}
 </topic>
 `;
-    return parseJsonTag<TopicEvaluation>(await askText(prompt, 2000), 'topic', '글감 평가');
+    return parseJsonTag<TopicEvaluation>(await askText('evaluateTopic', prompt, 2000), 'topic', '글감 평가');
   },
 
   // 3. 기존 블로그 글을 바탕으로 OSMU (인스타, 숏츠, 스레드 등) 콘텐츠 변환
@@ -618,9 +635,12 @@ ${platformGuide}
       max_tokens: 1500,
       messages: [{ role: 'user', content: prompt }],
     });
+    await checkResponse('generateOSMUContent', response, 1500);
 
     const textBlock = response.content.find((block: any) => block.type === 'text') as any;
-    return textBlock?.text || '';
+    // 생각만 하고 글 없이 끝나면 빈 초안이 저장되므로 오류로 알린다.
+    if (!textBlock?.text) throw new Error('AI 응답이 비어 있습니다.');
+    return textBlock.text;
   },
 
   // 4. 기사/수집 원문 실시간 AI 3줄 핵심 요약 & 블로그 착안점 도출
@@ -652,6 +672,7 @@ ${text.slice(0, 3500)}
       system: "You are an expert editorial consultant. Output strictly formatted XML tags as instructed.",
       messages: [{ role: 'user', content: prompt }],
     });
+    await checkResponse('quickSummarizeArticle', response, 1000);
 
     const textBlock = response.content.find((block: any) => block.type === 'text') as any;
     const raw = textBlock?.text || '';
