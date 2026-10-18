@@ -288,6 +288,84 @@ describe('IMAGES 단계 채점·재생성', () => {
   });
 });
 
+describe('planImageSet 다시 계획', () => {
+  const base = { point: '뜻', scene: '', must: '', avoid: '' };
+  function planWith(sections: any[], coverAnchor?: string) {
+    vi.mocked(aiService.planImages).mockImplementation(async () => ({
+      style: 'flat',
+      cover: { ...base, anchor: coverAnchor, prompt: 'a desk with a plant near the window' },
+      sections: sections.map((s) => ({ ...base, ...s })),
+    }));
+  }
+  const replanned = { ...base, anchor: '공유기 / a home router', prompt: 'a home router blinking on a shelf' };
+
+  it('anchor에 개념을 나열한 소제목 장면은 사유와 함께 한 번 다시 계획한다', async () => {
+    seedPost();
+    planWith([{ h2: '물은 언제 주나요?', anchor: '블루투스·LAN·인터넷 / cables', prompt: 'many cables on a floor' }]);
+    const replan = vi.spyOn(aiService, 'replanScene').mockResolvedValue(replanned);
+    await advancePost(1, Infinity);
+
+    expect(replan).toHaveBeenCalledTimes(1);
+    expect(replan.mock.calls[0][0].reason).toContain('개념이 여러 개');
+    expect(readyPlan().sections[0]).toMatchObject({ h2: '물은 언제 주나요?', anchor: '공유기 / a home router' });
+  });
+
+  it('다시 계획해도 나열이면 그대로 쓰고 더 부르지 않는다', async () => {
+    seedPost();
+    planWith([{ h2: '물은 언제 주나요?', anchor: '암호화 및 인증 / a lock', prompt: 'a padlock on a laptop' }]);
+    const replan = vi.spyOn(aiService, 'replanScene').mockResolvedValue({ ...replanned, anchor: '암호화·인증 / a lock' });
+    await advancePost(1, Infinity);
+
+    expect(replan).toHaveBeenCalledTimes(1);
+    expect(readyPlan().sections[0].anchor).toBe('암호화·인증 / a lock');
+  });
+
+  it('표지 anchor가 나열이어도 다시 계획하지 않는다', async () => {
+    seedPost();
+    planWith([{ h2: '물은 언제 주나요?', anchor: '물뿌리개 / a watering can', prompt: 'watering can pouring water' }], '노트북·휴대폰 / two devices');
+    const replan = vi.spyOn(aiService, 'replanScene').mockResolvedValue(replanned);
+    await advancePost(1, Infinity);
+
+    expect(replan).not.toHaveBeenCalled();
+  });
+
+  it('앞 장면과 겹치고 나열이기도 하면 한 번만 다시 계획하고 사유를 둘 다 전한다', async () => {
+    seedPost();
+    planWith([{ h2: '물은 언제 주나요?', anchor: '물뿌리개·화분흙 / water and soil', prompt: 'a desk with a plant near the window' }]);
+    const replan = vi.spyOn(aiService, 'replanScene').mockResolvedValue(replanned);
+    await advancePost(1, Infinity);
+
+    expect(replan).toHaveBeenCalledTimes(1);
+    expect(replan.mock.calls[0][0].reason).toContain('겹쳤습니다');
+    expect(replan.mock.calls[0][0].reason).toContain('개념이 여러 개');
+  });
+
+  it('다시 계획이 실패하거나 prompt가 비면 원래 장면을 쓰고 READY까지 간다', async () => {
+    seedPost();
+    planWith([
+      { h2: '물은 언제 주나요?', anchor: '물뿌리개·화분흙 / water and soil', prompt: 'a watering can on soil' },
+      { h2: '겨울에는 어떻게 하나요?', anchor: '창문·햇빛 / a window', prompt: 'a frosty window with sunlight' },
+    ]);
+    vi.spyOn(aiService, 'replanScene')
+      .mockRejectedValueOnce(new Error('AI 응답이 길이 제한(4000 토큰)에서 잘렸습니다.'))
+      .mockResolvedValueOnce({ ...replanned, prompt: '' });
+    const post = await advancePost(1, Infinity);
+
+    expect(post.stage).toBe('READY');
+    expect(post.stageError).toBeNull();
+    expect(readyPlan().sections.map((s: any) => s.anchor)).toEqual(['물뿌리개·화분흙 / water and soil', '창문·햇빛 / a window']);
+  });
+
+  it('계획이 없는 IMAGES 단계는 남은 시간이 120초 미만이면 시작하지 않는다', async () => {
+    seedPost({ stage: 'IMAGES', content: BODY });
+    const post = await advancePost(1, Date.now() + 60_000);
+
+    expect(post.stage).toBe('IMAGES');
+    expect(post.stageError).toBeNull();
+    expect(aiService.planImages).not.toHaveBeenCalled();
+  });
+});
+
 describe('regenerateImage', () => {
   it('다른 실행이 잠근 글은 409로 거절하고, 끝나면 잠금을 푼다', async () => {
     seedPost();

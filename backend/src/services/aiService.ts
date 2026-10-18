@@ -107,7 +107,9 @@ ${numbered(input.ruleTemplates, '제한 없음')}`;
 
 // Design Ref: §5.1 — 장면은 은유가 아니라 글 속 실제 대상(anchor)에서 출발한다. 캡션은 본문에 그대로 실린다.
 // 예시 문장에 색·재질을 넣으면 그대로 결과에 섞이므로(#44에서 확인) 예시는 장면 구성만 보여준다.
-const SCENE_RULES = `- 먼저 anchor를 정합니다: 그 소제목 본문에 실제로 나오는 고유 대상(제품·서비스·기기·앱 화면·장소·사람의 행동). 형식은 "한국어 원문 표현 / English visual description"입니다. 제품은 상표 대신 생김새로 묘사합니다.
+// v2: 개념을 나열한 anchor(블루투스·LAN·인터넷)와 화면 속 내용 anchor(흐려서 안 보임)가 3점의 원인이었다.
+const SCENE_RULES = `- 먼저 anchor를 정합니다: 그 소제목의 핵심 개념 하나를 대표하는, 눈에 보이는 사물이나 사람의 행동(제품·기기·장소·손으로 하는 동작)입니다. 소제목에 개념이 여러 개면 본문에서 가장 먼저 설명하는 하나만 고르고, 나머지는 caption에 남깁니다. 형식은 "한국어 원문 표현 / English visual description"이고, 한국어 부분에 '·'나 쉼표로 여러 개를 나열하지 않습니다. 제품은 상표 대신 생김새로 묘사합니다.
+- 화면 속 내용(설정 항목·검사 결과·로그·문서 글)은 anchor가 될 수 없습니다. 화면은 흐리게 그리므로 알아볼 수 없기 때문입니다. 그 기능을 쓰는 손·기기·주변 사물로 보여주고, 화면은 배경에 둡니다.
 - prompt는 영어 한 단락으로, 다음 순서로 씁니다: anchor와 그 행동·상태 → 장소·맥락 → shot type·angle·lens → 조명 → 분위기. 화풍·색·재질은 style에서 정하므로 prompt에 쓰지 않습니다.
   예: "a person seen from behind adjusting settings on a laptop at a home desk, the screen showing a blurred unreadable dashboard, a small smart home hub on the shelf beside it, medium shot, eye level, 35mm lens, soft window light from the left, calm focused mood, negative space on the right"
 - 사람은 뒷모습·옆모습·기기를 다루는 손까지 그릴 수 있습니다. 얼굴 클로즈업과 군중 장면은 피합니다(왜곡이 잦음).
@@ -461,7 +463,8 @@ ${SCENE_RULES}
 {"kind": "news|howto|concept", "style": "...", "cover": {"anchor": "한국어 원문 표현 / English description", "point": "전달할 뜻(한국어)", "scene": "장면(한국어)", "must": "필수 요소(영어)", "avoid": "제외 요소(영어)", "prompt": "...", "caption": "..."}, "sections": [{"h2": "...", "anchor": "...", "point": "...", "scene": "...", "must": "...", "avoid": "...", "prompt": "...", "caption": "..."}]}
 </plan>
 `;
-    const text = await askText(prompt, 8000);
+    // 모델이 답 앞에 생각(thinking)을 쓰고 그 토큰도 길이 제한에 포함된다. 7장면 계획이 5.5~8.5천 토큰이라 8000에서 4번 중 1번 잘렸다(v2 실측).
+    const text = await askText(prompt, 16000);
     const plan = parseJsonTag<ImagePlan>(text, 'plan', '이미지 계획');
     if (!plan.style || !plan.cover?.prompt || !Array.isArray(plan.sections)) {
       throw new Error('이미지 계획에 스타일이나 표지가 없습니다.');
@@ -470,11 +473,12 @@ ${SCENE_RULES}
     return plan;
   },
 
-  // 겹치는 장면 하나만 다시 계획한다.
-  async replanScene(input: { h2: string; section: string; style: string; avoidPrompts: string[] }) {
+  // 겹치거나 anchor에 개념을 나열한 장면 하나만 다시 계획한다. reason은 왜 다시 계획하는지 AI에 알려준다.
+  async replanScene(input: { h2: string; section: string; style: string; avoidPrompts: string[]; reason?: string }) {
+    const reasonLine = input.reason ? `[다시 계획하는 이유] ${input.reason}\n` : '';
     const prompt = `
 블로그 소제목 하나에 들어갈 이미지 장면을 새로 계획하세요. 아래 기존 장면들과 구도·소재가 겹치면 안 됩니다.
-
+${reasonLine}
 [스타일] ${input.style}
 [소제목] ${input.h2}
 [소제목 본문]
@@ -488,7 +492,8 @@ ${SCENE_RULES}
 {"h2": "${input.h2}", "anchor": "...", "point": "...", "scene": "...", "must": "...", "avoid": "...", "prompt": "...", "caption": "..."}
 </scene>
 `;
-    return parseJsonTag<ImageScene>(await askText(prompt, 1500), 'scene', '장면 계획');
+    // 생각(thinking) 토큰까지 들어가도록 계획 한 장면 분량보다 넉넉하게 둔다.
+    return parseJsonTag<ImageScene>(await askText(prompt, 4000), 'scene', '장면 계획');
   },
 
   // Design Ref: §5.3 — 생성된 이미지를 보고 소제목·anchor와 맞는지 1~5점으로 채점한다.
@@ -513,6 +518,11 @@ ${SCENE_RULES}
 3: 주제는 관련 있으나 대상이 흐리거나 일부만 보임
 2: 일반적인 그림이나 상징물뿐, 대상이 없음
 1: 내용과 무관하거나, 손·얼굴 왜곡 또는 읽히는 글자가 크게 보임
+
+[감점하지 않는 것]
+- 화면·문서의 글자와 숫자가 흐리거나 읽히지 않는 것 (일부러 흐리게 그립니다). 단, 보여야 할 대상이 화면 속 내용 자체라면 흐려서 알아볼 수 없을 때 3점 이하입니다.
+- 색·재질이 대상 묘사와 다른 것 (화풍이 정합니다)
+이 두 가지 말고는 위 기준대로 채점합니다. 손·얼굴 왜곡이나 크게 읽히는 글자는 여전히 1점입니다.
 
 아래 형식의 JSON만 <score> 태그 안에 출력하세요. 다른 설명은 쓰지 않습니다. reason은 무엇이 보이고 무엇이 빠졌는지 한국어 한 문장(60자 이내)입니다.
 <score>{"score": 4, "reason": "..."}</score>

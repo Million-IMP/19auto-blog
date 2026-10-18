@@ -38,6 +38,23 @@ export function anchorEnglish(scene: ImageScene) {
   return english && !/[가-힣]/.test(english) ? english : '';
 }
 
+// Design Ref: v2 §8.2 — anchor 한국어 부분에 개념을 나열했는지(·, 쉼표, "및"). 여러 개면 이미지에 일부만 보여 3점이 나왔다.
+// "와/과"는 "신호와 간섭의 비율"처럼 한 개념인 경우가 많아 보지 않는다.
+const LIST_MARK = /[,，、]|\s및\s/;
+const DOT = /[·ㆍ•∙・]/;
+
+export function hasListedAnchor(scene: ImageScene) {
+  // "TCP/IP 설정 / …"처럼 한국어에도 '/'가 있을 수 있어 ' / '로 나눈다. 한글이 없으면 형식이 다른 anchor라 보지 않는다.
+  const korean = (scene.anchor ?? '').split(' / ')[0].replace(/\s*([·ㆍ•∙・])\s*/g, '$1');
+  if (!/[가-힣]/.test(korean)) return false;
+  if (LIST_MARK.test(korean)) return true;
+  // "송·수신", "입·출력"처럼 한 글자를 묶은 말은 한 개념이다. 점 양쪽이 모두 2글자 이상일 때만 나열로 본다.
+  return korean.split(/\s+/).some((word) => {
+    const parts = word.split(DOT);
+    return parts.length > 1 && parts.every((part) => part.replace(/[^가-힣A-Za-z0-9]/g, '').length >= 2);
+  });
+}
+
 // 다시 만들 때는 대상이 분명히 보이도록 prompt에 한 번 더 못박는다.
 export function retryPrompt(scene: ImageScene) {
   const subject = anchorEnglish(scene) || scene.must;

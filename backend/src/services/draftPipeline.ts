@@ -2,7 +2,7 @@ import type { Post } from '@prisma/client';
 import { prisma } from '../db';
 import { aiService, extractUrlText, remainingTime, withDeadline, type DraftContext, type ImagePlan, type ImageScene, type Outline } from './aiService';
 import { imageProvider, randomSeed } from './imageProvider';
-import { maxRebuilds, needsRetry, retryPrompt, retrySpeed, scoreScene, stripAiImages, stripStyleWords } from './imageQuality';
+import { hasListedAnchor, maxRebuilds, needsRetry, retryPrompt, retrySpeed, scoreScene, stripAiImages, stripStyleWords } from './imageQuality';
 
 // 상태 코드가 있는 오류. 라우트가 그대로 응답 코드로 쓴다.
 export class PipelineError extends Error {
@@ -99,19 +99,34 @@ async function planImageSet(post: Post): Promise<ImagePlan> {
   });
   plan.sections = plan.sections
     .map((s) => ({ ...s, h2: (s.h2 || '').trim() }))
-    .filter((s, i, all) => heads.includes(s.h2) && all.findIndex((o) => o.h2 === s.h2) === i);
+    .filter((s, i, all) => heads.includes(s.h2) && all.findIndex((o) => o.h2 === s.h2) === i && hasPrompt(s));
 
-  // 앞 장면과 겹치는 장면만 한 번 다시 계획한다.
+  // 앞 장면과 겹치거나 anchor에 개념을 나열한 소제목 장면만 한 번 다시 계획한다. 결과가 또 나열이어도 그대로 쓴다.
+  // Design Ref: v2 §6 — 표지는 글 전체를 대표하므로 나열 감지를 하지 않는다.
   for (let i = 0; i < plan.sections.length; i += 1) {
+    const scene = plan.sections[i];
     const earlier = [plan.cover, ...plan.sections.slice(0, i)].map((s) => s.prompt);
-    if (earlier.some((p) => similarity(p, plan.sections[i].prompt) > 0.6)) {
-      const h2 = plan.sections[i].h2 as string;
-      const replanned = await aiService.replanScene({ h2, section: sectionText(post.content, h2), style: plan.style, avoidPrompts: earlier });
-      plan.sections[i] = { ...replanned, h2 };
+    const reasons: string[] = [];
+    if (earlier.some((p) => similarity(p, scene.prompt) > 0.6)) reasons.push('앞 장면과 구도·소재가 겹쳤습니다.');
+    if (hasListedAnchor(scene)) {
+      reasons.push(`이전 anchor "${(scene.anchor || '').split(' / ')[0].trim()}"에 개념이 여러 개였습니다. 본문에서 가장 먼저 설명하는 하나만 고르세요.`);
+    }
+    // 다시 계획은 더 나은 장면을 위한 것이라, 시간이 모자라거나 실패하면 원래 장면을 쓴다. 실패로 계획 전체를 버리지 않는다.
+    if (reasons.length === 0 || remainingTime() < REPLAN_MIN_MS) continue;
+    const h2 = scene.h2 as string;
+    try {
+      const replanned = await aiService.replanScene({ h2, section: sectionText(post.content, h2), style: plan.style, avoidPrompts: earlier, reason: reasons.join(' ') });
+      if (hasPrompt(replanned)) plan.sections[i] = { ...replanned, h2 };
+    } catch (err: any) {
+      console.warn(`[장면 다시 계획] 실패, 원래 장면 유지: ${String(err?.message || err).slice(0, 120)}`);
     }
   }
   for (const scene of [plan.cover, ...plan.sections]) scene.prompt = stripStyleWords(scene.prompt);
   return plan;
+}
+
+function hasPrompt(scene: Partial<ImageScene> | null | undefined) {
+  return typeof scene?.prompt === 'string' && scene.prompt.trim().length > 0;
 }
 
 function imageMarkdown(scene: ImageScene) {
@@ -407,6 +422,15 @@ export function requestDeadline() {
 const MIN_STAGE_MS = 20_000;
 // 재시도는 렌더(최대 40초)와 채점(최대 30초)을 둘 다 끝낼 시간이 있을 때만 한다.
 const RETRY_MIN_MS = 60_000;
+// 장면 다시 계획 1번(생각 토큰 포함 최대 약 18초)을 마칠 시간
+const REPLAN_MIN_MS = 30_000;
+// 계획이 없는 IMAGES 단계는 계획(23~34초, 최악 약 66초)과 다시 계획을 마칠 시간이 있을 때만 시작한다.
+// POLISH 직후 20초만 남았을 때 시작하면 시간 초과로 stageError가 되고, 크론은 그 글을 건너뛴다.
+const IMAGE_PLAN_MIN_MS = 120_000;
+
+function stageMinMs(post: Post) {
+  return post.stage === 'IMAGES' && !post.imagePlan ? IMAGE_PLAN_MIN_MS : MIN_STAGE_MS;
+}
 // 단계 실행 중 잠금. 크론과 이어하기가 다른 인스턴스에서 같은 글을 동시에 처리하지 않게 한다.
 const LOCK_MS = 5 * 60_000;
 
@@ -450,7 +474,7 @@ export async function advancePost(
     if (options.clearError && post.stageError) {
       post = await prisma.post.update({ where: { id: postId }, data: { stageError: null } });
     }
-    while (post.stage !== 'READY' && !post.stageError && deadline - Date.now() >= MIN_STAGE_MS) {
+    while (post.stage !== 'READY' && !post.stageError && deadline - Date.now() >= stageMinMs(post)) {
       const current: Post = post;
       try {
         await prisma.post.update({ where: { id: postId }, data: { lockedUntil: new Date(Date.now() + LOCK_MS) } });
