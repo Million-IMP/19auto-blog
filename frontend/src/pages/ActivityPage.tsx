@@ -25,6 +25,7 @@ const EVENT_STYLE: Record<string, { label: string; tone: BadgeTone; icon: typeof
   POST_READY: { label: '초안 완성', tone: 'published', icon: CheckCircle2 },
   POST_STAGE_ERROR: { label: '단계 실패', tone: 'danger', icon: AlertTriangle },
   CRON_ERROR: { label: '수집 오류', tone: 'danger', icon: AlertTriangle },
+  AI_TOKEN_NEAR_LIMIT: { label: 'AI 길이 경고', tone: 'draft', icon: AlertTriangle },
 };
 
 function dayLabel(date: Date) {

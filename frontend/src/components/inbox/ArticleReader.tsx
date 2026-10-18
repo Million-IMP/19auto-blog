@@ -71,7 +71,9 @@ const handleQuickSummary = async () => {
     });
     setAiSummary(res.data);
   } catch (e) {
-    alert("AI 요약 생성 중 오류가 발생했습니다.");
+    // 응답 길이 제한에서 잘린 경우처럼 서버가 원인을 보내면 그대로 보여준다.
+    const reason = (e as { response?: { data?: { error?: string } } })?.response?.data?.error;
+    alert(reason ? `AI 요약 생성 중 오류가 발생했습니다: ${reason}` : 'AI 요약 생성 중 오류가 발생했습니다.');
   } finally {
     setIsSummarizing(false);
   }
