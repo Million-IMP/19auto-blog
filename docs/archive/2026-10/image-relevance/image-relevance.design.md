@@ -7,7 +7,7 @@
 > **Author**: jeh-lab + Claude
 > **Date**: 2026-10-18
 > **Status**: Draft
-> **Planning Doc**: [image-relevance.plan.md](../../01-plan/features/image-relevance.plan.md)
+> **Planning Doc**: [image-relevance.plan.md](./image-relevance.plan.md)
 
 ### Pipeline References
 
