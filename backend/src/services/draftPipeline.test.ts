@@ -19,6 +19,7 @@ vi.mock('../db', () => ({
   prisma: {
     post: {
       findUnique: async ({ where }: any) => posts.get(where.id) ?? null,
+      findUniqueOrThrow: async ({ where }: any) => posts.get(where.id)!,
       update: async ({ where, data }: any) => {
         const next = { ...posts.get(where.id)!, ...data };
         posts.set(where.id, next);
@@ -36,6 +37,9 @@ vi.mock('../db', () => ({
         logs.push(data);
         return data;
       },
+      // 테스트 안의 기록은 모두 24시간 이내로 본다.
+      count: async ({ where }: any) =>
+        logs.filter((l) => l.event === where.event && l.message.startsWith(where.message.startsWith)).length,
     },
     blogProfile: {
       upsert: async () => ({ id: 1, audience: '', purpose: '', tone: '', structure: '', ctaText: '', ctaUrl: '', imageStyle: '', bannedPhrases: '' }),
@@ -43,13 +47,16 @@ vi.mock('../db', () => ({
   },
 }));
 
+// 호출마다 다른 주소를 돌려줘서 재생성 여부를 본문에서 구분할 수 있게 한다.
+const render = vi.hoisted(() => vi.fn());
+
 vi.mock('./imageProvider', () => ({
-  imageProvider: () => ({ name: 'fake', render: async () => ({ url: 'https://img.test/a.png', provider: 'fake' }) }),
+  imageProvider: () => ({ name: 'fake', render }),
   randomSeed: () => 1,
 }));
 
 const { aiService } = await import('./aiService');
-const { advancePost, isPublicUrl, resumePost } = await import('./draftPipeline');
+const { advancePost, isPublicUrl, rebuildImageSet, regenerateImage, resumePost } = await import('./draftPipeline');
 
 const BODY = '도입 문단입니다.\n\n## 물은 언제 주나요?\n흙이 마르면 줍니다.\n\n## 겨울에는 어떻게 하나요?\n횟수를 줄입니다.';
 
@@ -86,6 +93,10 @@ beforeEach(() => {
   posts.clear();
   logs.length = 0;
   vi.restoreAllMocks();
+  let count = 0;
+  render.mockReset();
+  render.mockImplementation(async () => ({ url: `https://img.test/${++count}.png`, provider: 'fake', data: Buffer.from('img'), mediaType: 'image/png' }));
+  vi.spyOn(aiService, 'scoreImage').mockResolvedValue({ score: 5, reason: '대상이 보임' });
   vi.spyOn(aiService, 'generateOutline').mockResolvedValue({
     keyword: '실내 식물',
     title: '실내 식물 물주기',
@@ -93,14 +104,15 @@ beforeEach(() => {
   });
   vi.spyOn(aiService, 'generateBody').mockResolvedValue(BODY);
   vi.spyOn(aiService, 'polishBody').mockResolvedValue({ content: BODY, notes: '' });
-  vi.spyOn(aiService, 'planImages').mockResolvedValue({
+  // 파이프라인이 장면 객체에 url을 써 넣으므로, 계획할 때마다 새 객체를 돌려준다.
+  vi.spyOn(aiService, 'planImages').mockImplementation(async () => ({
     style: 'flat illustration',
     cover: { point: '표지', scene: '', must: '', avoid: '', prompt: 'a plant on a desk' },
     sections: [
-      { h2: '물은 언제 주나요?', point: '물주기', scene: '', must: '', avoid: '', prompt: 'watering can pouring water' },
+      { h2: '물은 언제 주나요?', anchor: '물뿌리개 / a watering can', point: '물주기', scene: '', must: 'watering can', avoid: '', prompt: 'watering can pouring water' },
       { h2: '겨울에는 어떻게 하나요?', point: '겨울', scene: '', must: '', avoid: '', prompt: 'snowy window with sunlight' },
     ],
-  });
+  }));
 });
 
 describe('advancePost', () => {
@@ -163,6 +175,166 @@ describe('advancePost', () => {
     const post = await advancePost(1, Infinity);
 
     expect(post.stage).toBe('READY');
+  });
+});
+
+function readyPlan(id = 1) {
+  return JSON.parse(posts.get(id)!.imagePlan!);
+}
+
+describe('IMAGES 단계 채점·재생성', () => {
+  it('모든 장면을 채점해 점수를 남기고, 점수가 높으면 다시 만들지 않는다', async () => {
+    seedPost();
+    const post = await advancePost(1, Infinity);
+
+    expect(post.stage).toBe('READY');
+    expect(render).toHaveBeenCalledTimes(3);
+    const plan = readyPlan();
+    expect([plan.cover, ...plan.sections].map((s: any) => [s.score, s.checked])).toEqual([[5, true], [5, true], [5, true]]);
+    expect(plan.retries ?? 0).toBe(0);
+  });
+
+  it('점수가 낮은 장면은 품질을 올려 한 번 다시 만들고 새 이미지로 바꾼다', async () => {
+    seedPost();
+    vi.mocked(aiService.scoreImage)
+      .mockResolvedValueOnce({ score: 5, reason: '' }) // 표지
+      .mockResolvedValueOnce({ score: 2, reason: '대상 없음' }) // 소제목 1
+      .mockResolvedValueOnce({ score: 4, reason: '' }) // 소제목 1 재생성
+      .mockResolvedValue({ score: 5, reason: '' });
+    const post = await advancePost(1, Infinity);
+
+    expect(render).toHaveBeenCalledTimes(4);
+    expect(render.mock.calls[2][0].speed).toBe('default');
+    expect(render.mock.calls[2][0].prompt).toContain('must be clearly visible');
+    const plan = readyPlan();
+    expect(plan.retries).toBe(1);
+    expect(plan.sections[0]).toMatchObject({ retried: true, score: 4, url: 'https://img.test/3.png' });
+    expect(post.content).toContain('https://img.test/3.png');
+    expect(post.content).not.toContain('https://img.test/2.png');
+  });
+
+  it('다시 만든 이미지 점수가 더 낮으면 원래 이미지를 둔다', async () => {
+    seedPost();
+    vi.mocked(aiService.scoreImage)
+      .mockResolvedValueOnce({ score: 2, reason: '' }) // 표지
+      .mockResolvedValueOnce({ score: 1, reason: '' }) // 표지 재생성
+      .mockResolvedValue({ score: 5, reason: '' });
+    await advancePost(1, Infinity);
+
+    expect(readyPlan().cover).toMatchObject({ retried: true, score: 2, url: 'https://img.test/1.png' });
+  });
+
+  it('재생성은 글당 최대 2장까지만 한다', async () => {
+    seedPost();
+    vi.mocked(aiService.scoreImage).mockResolvedValue({ score: 1, reason: '무관' });
+    await advancePost(1, Infinity);
+
+    const plan = readyPlan();
+    expect(render).toHaveBeenCalledTimes(5); // 3장 + 재생성 2장
+    expect(plan.retries).toBe(2);
+    expect(plan.sections[1].retried).toBeUndefined();
+  });
+
+  it('채점이 실패해도 READY까지 가고 점수 없이 남긴다', async () => {
+    seedPost();
+    vi.mocked(aiService.scoreImage).mockRejectedValue(new Error('API 오류'));
+    const post = await advancePost(1, Infinity);
+
+    expect(post.stage).toBe('READY');
+    expect(post.stageError).toBeNull();
+    const plan = readyPlan();
+    expect(plan.cover.checked).toBe(true);
+    expect(plan.cover.score).toBeUndefined();
+    expect(render).toHaveBeenCalledTimes(3);
+  });
+
+  it('재생성 렌더가 실패하면 재시도 횟수를 쓰지 않고 원래 이미지를 둔다', async () => {
+    seedPost();
+    vi.mocked(aiService.scoreImage).mockResolvedValueOnce({ score: 1, reason: '' }).mockResolvedValue({ score: 5, reason: '' });
+    render
+      .mockResolvedValueOnce({ url: 'https://img.test/a.png', provider: 'fake' })
+      .mockRejectedValueOnce(new Error('Ideogram 429'));
+    const post = await advancePost(1, Infinity);
+
+    expect(post.stage).toBe('READY');
+    expect(readyPlan().retries ?? 0).toBe(0);
+    expect(readyPlan().cover).toMatchObject({ score: 1, url: 'https://img.test/a.png' });
+  });
+
+  it('이어하기: 이미지는 있지만 채점 전인 장면은 다시 만들지 않고 주소로 채점한다', async () => {
+    const plan = {
+      style: 'flat',
+      cover: { point: '표지', scene: '', must: '', avoid: '', prompt: 'p', url: 'https://img.test/old.png' },
+      sections: [],
+    };
+    seedPost({ stage: 'IMAGES', content: BODY, imagePlan: JSON.stringify(plan) });
+    await advancePost(1, Infinity);
+
+    expect(render).not.toHaveBeenCalled();
+    expect(aiService.scoreImage).toHaveBeenCalledWith(expect.objectContaining({ image: { url: 'https://img.test/old.png' } }));
+    expect(readyPlan().cover).toMatchObject({ checked: true, score: 5 });
+  });
+
+  it('장면 prompt에 들어간 색·재질 단어는 지운다', async () => {
+    seedPost();
+    vi.mocked(aiService.planImages).mockImplementation(async () => ({
+      style: 'flat',
+      cover: { point: '표지', scene: '', must: '', avoid: '', prompt: 'a desk lamp, amber light, matte surface' },
+      sections: [],
+    }));
+    await advancePost(1, Infinity);
+
+    expect(readyPlan().cover.prompt).toBe('a desk lamp, light, surface');
+  });
+});
+
+describe('regenerateImage', () => {
+  it('다른 실행이 잠근 글은 409로 거절하고, 끝나면 잠금을 푼다', async () => {
+    seedPost();
+    await advancePost(1, Infinity);
+    posts.set(1, { ...posts.get(1)!, lockedUntil: new Date(Date.now() + 60_000) });
+    await expect(regenerateImage(1, 1)).rejects.toMatchObject({ status: 409 });
+
+    posts.set(1, { ...posts.get(1)!, lockedUntil: null });
+    const post = await regenerateImage(1, 1);
+    expect(post.content).toContain('https://img.test/4.png');
+    expect(posts.get(1)!.lockedUntil).toBeNull();
+  });
+});
+
+describe('rebuildImageSet', () => {
+  it('본문의 AI 이미지를 지우고 새 이미지 세트로 다시 만든다', async () => {
+    seedPost();
+    await advancePost(1, Infinity);
+    const before = posts.get(1)!.content;
+    expect(before.match(/!\[/g)).toHaveLength(3);
+
+    const post = await rebuildImageSet(1, Infinity);
+    expect(post.stage).toBe('READY');
+    expect(post.content.match(/!\[/g)).toHaveLength(3); // 중복 없이 다시 3장
+    expect(post.content).toContain('https://img.test/4.png');
+    expect(post.content).not.toContain('https://img.test/1.png');
+    expect(aiService.planImages).toHaveBeenCalledTimes(2);
+    expect(logs.filter((l) => l.event === 'IMAGE_REBUILD')).toHaveLength(1);
+    expect(posts.get(1)!.lockedUntil).toBeNull();
+  });
+
+  it('24시간에 3번까지만 다시 만들고, 그 뒤에는 429', async () => {
+    seedPost();
+    await advancePost(1, Infinity);
+    for (let i = 0; i < 3; i += 1) await rebuildImageSet(1, Infinity);
+    await expect(rebuildImageSet(1, Infinity)).rejects.toMatchObject({ status: 429 });
+    expect(aiService.planImages).toHaveBeenCalledTimes(4);
+  });
+
+  it('없는 글은 404, 발행한 글·작성 중인 글·잠긴 글은 409', async () => {
+    await expect(rebuildImageSet(99, Infinity)).rejects.toMatchObject({ status: 404 });
+    seedPost({ id: 2, stage: 'READY', status: 'PUBLISHED' });
+    await expect(rebuildImageSet(2, Infinity)).rejects.toMatchObject({ status: 409 });
+    seedPost({ id: 3, stage: 'DRAFT' });
+    await expect(rebuildImageSet(3, Infinity)).rejects.toMatchObject({ status: 409 });
+    seedPost({ id: 4, stage: 'READY', lockedUntil: new Date(Date.now() + 60_000) });
+    await expect(rebuildImageSet(4, Infinity)).rejects.toMatchObject({ status: 409 });
   });
 });
 

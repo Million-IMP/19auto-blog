@@ -1,0 +1,108 @@
+import { aiService, type ImageInput, type ImagePlan, type ImageScene } from './aiService';
+import type { RenderedImage } from './imageProvider';
+
+// Design Ref: §1.2 — 이미지 관련성 채점과 재생성 판단, 본문 속 AI 이미지 교체. 파이프라인과 떼어 단위 테스트한다.
+
+function envNumber(name: string, fallback: number) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+// 이 점수보다 낮으면 다시 만든다 (기본 3)
+export function scoreMin() {
+  return envNumber('IMAGE_SCORE_MIN', 3);
+}
+
+// 글 하나에서 다시 만들 수 있는 최대 장수 (기본 2). Plan: 글당 추가 비용 ≤ $0.15
+export function maxRetries() {
+  return envNumber('IMAGE_MAX_RETRIES', 2);
+}
+
+// 글 하나에서 24시간 안에 이미지 세트를 다시 만들 수 있는 횟수 (기본 3). 한 번에 약 $0.35가 든다.
+export function maxRebuilds() {
+  return envNumber('IMAGE_MAX_REBUILDS', 3);
+}
+
+// 다시 만들 때 쓰는 Ideogram 속도. 처음 생성(turbo $0.03)보다 한 단계 높은 품질(default $0.06)
+export function retrySpeed(): 'turbo' | 'default' {
+  return process.env.IDEOGRAM_RETRY_SPEED?.toLowerCase() === 'turbo' ? 'turbo' : 'default';
+}
+
+export function needsRetry(scene: ImageScene, plan: ImagePlan) {
+  return scene.score !== undefined && scene.score < scoreMin() && !scene.retried && (plan.retries ?? 0) < maxRetries();
+}
+
+// anchor "한국어 / English" 중 영어 묘사. 이미지 모델에는 한국어를 보내지 않는다(한국어 prompt는 엉뚱한 그림이 나왔다).
+export function anchorEnglish(scene: ImageScene) {
+  const english = scene.anchor?.split('/').slice(1).join('/').trim();
+  return english && !/[가-힣]/.test(english) ? english : '';
+}
+
+// 다시 만들 때는 대상이 분명히 보이도록 prompt에 한 번 더 못박는다.
+export function retryPrompt(scene: ImageScene) {
+  const subject = anchorEnglish(scene) || scene.must;
+  return subject ? `${scene.prompt}. The main subject must be clearly visible and recognizable: ${subject}` : scene.prompt;
+}
+
+// Anthropic 이미지 입력이 받는 형식. 다른 형식(application/octet-stream 등)은 주소로 보내거나 채점을 건너뛴다.
+const VISION_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+
+function imageInput(image: Pick<RenderedImage, 'url' | 'data' | 'mediaType'>): ImageInput | null {
+  const mediaType = (image.mediaType || 'image/png').split(';')[0].trim().toLowerCase();
+  if (image.data && VISION_TYPES.includes(mediaType)) return { data: image.data.toString('base64'), mediaType };
+  if (/^https?:\/\//.test(image.url)) return { url: image.url };
+  return null;
+}
+
+// Design Ref: §5.1 — 장면 prompt에는 색·재질을 쓰지 않는다(화풍 style이 정한다). AI가 어긴 단어만 지운다.
+const STYLE_WORDS = /\b(teal|orange|amber|indigo|sage|coral|pastel|matte|glossy|clay|claymation|muted|vibrant|neon|monochrome)\b/gi;
+
+export function stripStyleWords(prompt: string) {
+  return prompt
+    .replace(STYLE_WORDS, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([,.])/g, '$1')
+    .replace(/,(\s*,)+/g, ',')
+    .replace(/^[\s,]+|[\s,]+$/g, '');
+}
+
+// 채점 결과를 장면에 기록한다. 실패해도 이미지 생성은 막지 않는다(점수 없음으로 남김).
+export async function scoreScene(scene: ImageScene, image: Pick<RenderedImage, 'url' | 'data' | 'mediaType'>) {
+  scene.checked = true;
+  delete scene.score;
+  delete scene.scoreReason;
+  const input = imageInput(image);
+  if (!input) return;
+  try {
+    const result = await aiService.scoreImage({
+      image: input,
+      h2: scene.h2 || '표지 (글 전체)',
+      point: scene.point,
+      anchor: scene.anchor || '',
+    });
+    scene.score = result.score;
+    scene.scoreReason = result.reason;
+  } catch (err: any) {
+    console.warn(`[이미지 채점] 건너뜀: ${String(err?.message || err).slice(0, 120)}`);
+  }
+}
+
+// insertImages가 넣은 AI 이미지(이미지 줄 + "▲ … (AI 생성 이미지)" 설명 줄)와 그 앞뒤 빈 줄 하나를 지운다.
+// 주소에 괄호가 들어 있어도(pollinations 이전 주소) 줄 끝까지를 주소로 본다.
+const AI_IMAGE = /^!\[[^\]]*\(AI 생성\)\]\(\S+\)\s*$/;
+const AI_CAPTION = /^\*▲ .*\(AI 생성 이미지\)\*\s*$/;
+
+export function stripAiImages(content: string) {
+  const lines = content.split('\n');
+  const output: string[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (!AI_IMAGE.test(lines[i])) {
+      output.push(lines[i]);
+      continue;
+    }
+    if (AI_CAPTION.test(lines[i + 1] ?? '')) i += 1;
+    if (output.length > 0 && output[output.length - 1].trim() === '') output.pop();
+    else if ((lines[i + 1] ?? '').trim() === '') i += 1;
+  }
+  return output.join('\n');
+}

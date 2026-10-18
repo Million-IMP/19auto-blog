@@ -14,10 +14,39 @@ type PipelinePost = {
   sources: string | null;
   polishNotes: string | null;
   imagePlan: string | null;
+  status?: string;
 };
 
-type ImageScene = { h2?: string; point: string; scene: string; must: string; avoid: string; caption?: string; url?: string };
-type ImagePlan = { style: string; provider?: string; cover: ImageScene; sections: ImageScene[] };
+type ImageScene = {
+  h2?: string;
+  anchor?: string;
+  point: string;
+  scene: string;
+  must: string;
+  avoid: string;
+  caption?: string;
+  url?: string;
+  score?: number;
+  scoreReason?: string;
+  retried?: boolean;
+};
+type ImagePlan = { style: string; provider?: string; retries?: number; cover: ImageScene; sections: ImageScene[] };
+
+// 이미지 관련성 점수(1~5). 4 이상 통과, 3 보통, 2 이하는 다시 생성 권장
+function ScoreBadge({ scene }: { scene: ImageScene }) {
+  if (scene.score === undefined) return null;
+  const tone = scene.score >= 4 ? 'bg-published/10 text-published border-published/40' : scene.score === 3 ? 'bg-info/10 text-info border-info/40' : 'bg-danger/10 text-danger border-danger/40';
+  return (
+    <span title={scene.scoreReason} className={`px-1.5 py-0.5 rounded-control border font-semibold text-xs ${tone}`}>
+      관련성 {scene.score}/5{scene.retried ? ' · 재생성' : ''}
+    </span>
+  );
+}
+
+function averageScore(plan: ImagePlan) {
+  const scores = [plan.cover, ...plan.sections].map((s) => s.score).filter((s): s is number => s !== undefined);
+  return scores.length > 0 ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : null;
+}
 
 function readPlan(raw: string | null): ImagePlan | null {
   if (!raw) return null;
@@ -28,7 +57,7 @@ function readPlan(raw: string | null): ImagePlan | null {
   }
 }
 
-function ImagePlanList({ plan, regenerating, onRegenerate }: { plan: ImagePlan; regenerating: number | null; onRegenerate: (index: number) => void }) {
+function ImagePlanList({ plan, regenerating, busy, onRegenerate }: { plan: ImagePlan; regenerating: number | null; busy: boolean; onRegenerate: (index: number) => void }) {
   const scenes = [{ label: '표지', scene: plan.cover }, ...plan.sections.map((s) => ({ label: s.h2 || '', scene: s }))];
   return (
     <div className="not-prose space-y-2">
@@ -39,13 +68,18 @@ function ImagePlanList({ plan, regenerating, onRegenerate }: { plan: ImagePlan; 
         <div key={index} className="flex gap-3 items-start bg-surface border border-line rounded-control p-2">
           {scene.url ? <img src={scene.url} alt={scene.point} className="w-28 h-16 object-cover rounded-control shrink-0 bg-surface-2" /> : <div className="w-28 h-16 rounded-control bg-surface-2 shrink-0" />}
           <div className="flex-1 min-w-0 space-y-0.5">
-            <p className="font-semibold text-ink truncate">{label}</p>
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="font-semibold text-ink truncate">{label}</p>
+              <ScoreBadge scene={scene} />
+            </div>
+            {scene.anchor && <p className="text-ink-2">대상: {scene.anchor.split('/')[0].trim()}</p>}
             <p className="text-ink-2">{scene.scene}</p>
+            {scene.scoreReason && <p className="text-ink-3">채점: {scene.scoreReason}</p>}
             <p className="text-ink-3">필수: {scene.must} · 제외: {scene.avoid}</p>
             {scene.caption && <p className="text-ink-3">캡션: ▲ {scene.caption}</p>}
           </div>
           {scene.url && (
-            <Button size="sm" onClick={() => onRegenerate(index)} disabled={regenerating !== null} icon={<RotateCw size={12} className={regenerating === index ? 'animate-spin' : ''} />}>
+            <Button size="sm" onClick={() => onRegenerate(index)} disabled={busy || regenerating !== null} icon={<RotateCw size={12} className={regenerating === index ? 'animate-spin' : ''} />}>
               다시 생성
             </Button>
           )}
@@ -76,6 +110,27 @@ export function PipelinePanel({ post, resuming, onResume, onChanged }: { post: P
   const failed = Boolean(post.stageError);
   const plan = readPlan(post.imagePlan);
   const [regenerating, setRegenerating] = useState<number | null>(null);
+  // 이미지 세트 다시 만들기는 Ideogram 비용이 드니 한 번 더 눌러야 실행한다
+  const [rebuildArmed, setRebuildArmed] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
+  const canRebuild = Boolean(plan) && post.stage === 'READY' && post.status !== 'PUBLISHED';
+  const average = plan ? averageScore(plan) : null;
+
+  const handleRebuild = async () => {
+    if (!rebuildArmed) {
+      setRebuildArmed(true);
+      return;
+    }
+    setRebuildArmed(false);
+    setRebuilding(true);
+    try {
+      await axios.post(`/api/posts/${post.id}/images/rebuild`);
+      onChanged();
+    } catch (e: any) {
+      alert(e.response?.data?.error || '이미지 세트를 다시 만들지 못했습니다.');
+    }
+    setRebuilding(false);
+  };
 
   const handleRegenerate = async (index: number) => {
     setRegenerating(index);
@@ -133,8 +188,16 @@ export function PipelinePanel({ post, resuming, onResume, onChanged }: { post: P
         </Section>
       )}
       {plan && (
-        <Section title={`이미지 계획 · ${1 + plan.sections.length}장`}>
-          <ImagePlanList plan={plan} regenerating={regenerating} onRegenerate={handleRegenerate} />
+        <Section title={`이미지 계획 · ${1 + plan.sections.length}장${average ? ` · 관련성 평균 ${average}` : ''}`}>
+          {canRebuild && (
+            <div className="not-prose flex flex-wrap items-center justify-between gap-2 mb-2">
+              <p className="text-ink-3">{rebuildArmed ? '한 번 더 누르면 새 계획으로 모든 이미지를 다시 만듭니다 (이미지 생성 비용 발생).' : '글 내용과 맞지 않으면 이미지 세트를 통째로 다시 만들 수 있습니다.'}</p>
+              <Button size="sm" variant={rebuildArmed ? 'danger' : undefined} onClick={handleRebuild} onBlur={() => setRebuildArmed(false)} disabled={rebuilding || regenerating !== null} icon={<RotateCw size={12} className={rebuilding ? 'animate-spin' : ''} />}>
+                {rebuilding ? '다시 만드는 중...' : rebuildArmed ? '정말 다시 만들기' : '이미지 세트 다시 만들기'}
+              </Button>
+            </div>
+          )}
+          <ImagePlanList plan={plan} regenerating={regenerating} busy={rebuilding} onRegenerate={handleRegenerate} />
         </Section>
       )}
       {post.polishNotes && (

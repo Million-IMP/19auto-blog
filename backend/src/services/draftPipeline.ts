@@ -2,6 +2,14 @@ import type { Post } from '@prisma/client';
 import { prisma } from '../db';
 import { aiService, extractUrlText, remainingTime, withDeadline, type DraftContext, type ImagePlan, type ImageScene, type Outline } from './aiService';
 import { imageProvider, randomSeed } from './imageProvider';
+import { maxRebuilds, needsRetry, retryPrompt, retrySpeed, scoreScene, stripAiImages, stripStyleWords } from './imageQuality';
+
+// 상태 코드가 있는 오류. 라우트가 그대로 응답 코드로 쓴다.
+export class PipelineError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+  }
+}
 import { scrapeArticle } from './scraperService';
 
 // 단계형 초안 파이프라인: 단계마다 결과를 저장하고, 실패하면 그 단계부터 다시 시작한다.
@@ -102,6 +110,7 @@ async function planImageSet(post: Post): Promise<ImagePlan> {
       plan.sections[i] = { ...replanned, h2 };
     }
   }
+  for (const scene of [plan.cover, ...plan.sections]) scene.prompt = stripStyleWords(scene.prompt);
   return plan;
 }
 
@@ -131,28 +140,96 @@ function insertImages(content: string, plan: ImagePlan) {
   return output.join('\n');
 }
 
-// 장면 하나만 새 seed로 다시 만든다. 본문의 이전 이미지 주소를 새 주소로 바꾼다.
-export async function regenerateImage(postId: number, index: number) {
-  const post = await prisma.post.findUnique({ where: { id: postId } });
-  if (!post?.imagePlan) throw new Error('이미지 계획이 없는 글입니다.');
-  const plan = JSON.parse(post.imagePlan) as ImagePlan;
-  const scene = index === 0 ? plan.cover : plan.sections[index - 1];
-  if (!scene) throw new Error('해당 장면을 찾을 수 없습니다.');
+async function renderScene(plan: ImagePlan, scene: ImageScene, options: { prompt?: string; speed?: 'turbo' | 'default' } = {}) {
   const seed = randomSeed();
   const image = await imageProvider().render({
-    prompt: scene.prompt,
+    prompt: options.prompt ?? scene.prompt,
     must: scene.must,
     avoid: scene.avoid,
     style: plan.style,
     width: 800,
-    height: index === 0 ? 400 : 450,
+    height: scene === plan.cover ? 400 : 450,
     seed,
+    speed: options.speed,
   });
-  const content = scene.url ? post.content.split(scene.url).join(image.url) : post.content;
-  scene.url = image.url;
-  scene.seed = seed;
   plan.provider = image.provider;
-  return prisma.post.update({ where: { id: postId }, data: { content, imagePlan: JSON.stringify(plan) } });
+  return { image, seed };
+}
+
+// Design Ref: §2.2 — 점수가 낮은 장면을 품질을 올려 한 번 다시 만든다. 새 이미지 점수가 더 낮으면 원래 이미지를 둔다.
+async function retryScene(plan: ImagePlan, scene: ImageScene) {
+  try {
+    const { image, seed } = await renderScene(plan, scene, { prompt: retryPrompt(scene), speed: retrySpeed() });
+    // 렌더에 성공했을 때만 재시도 횟수를 쓴다(실패한 요청은 비용이 들지 않는다).
+    plan.retries = (plan.retries ?? 0) + 1;
+    scene.retried = true;
+    const candidate: ImageScene = { ...scene };
+    await scoreScene(candidate, image);
+    if (candidate.score === undefined || scene.score === undefined || candidate.score >= scene.score) {
+      Object.assign(scene, { url: image.url, seed, score: candidate.score, scoreReason: candidate.scoreReason });
+    }
+  } catch (err: any) {
+    console.warn(`[이미지 재생성] 실패, 기존 이미지 유지: ${String(err?.message || err).slice(0, 120)}`);
+  }
+}
+
+// 장면 하나만 새 seed로 다시 만든다. 본문의 이전 이미지 주소를 새 주소로 바꾼다.
+// 파이프라인과 같은 잠금을 잡아, 세트 다시 만들기·크론이 저장하는 계획을 덮어쓰지 않게 한다.
+export async function regenerateImage(postId: number, index: number) {
+  const found = await prisma.post.findUnique({ where: { id: postId } });
+  if (!found) throw new PipelineError('글을 찾을 수 없습니다.', 404);
+  if (!(await claimPost(postId))) throw new PipelineError(BUSY_MESSAGE, 409);
+  try {
+    // 잠금을 잡은 뒤 다시 읽어야 그 사이에 바뀐 계획을 덮어쓰지 않는다.
+    const post = await prisma.post.findUniqueOrThrow({ where: { id: postId } });
+    if (!post.imagePlan) throw new PipelineError('이미지 계획이 없는 글입니다.', 409);
+    const plan = JSON.parse(post.imagePlan) as ImagePlan;
+    const scene = index === 0 ? plan.cover : plan.sections[index - 1];
+    if (!scene) throw new PipelineError('해당 장면을 찾을 수 없습니다.', 404);
+    const { image, seed } = await renderScene(plan, scene);
+    await scoreScene(scene, image);
+    const content = scene.url ? post.content.split(scene.url).join(image.url) : post.content;
+    scene.url = image.url;
+    scene.seed = seed;
+    return await prisma.post.update({ where: { id: postId }, data: { content, imagePlan: JSON.stringify(plan) } });
+  } finally {
+    await prisma.post.updateMany({ where: { id: postId }, data: { lockedUntil: null } });
+  }
+}
+
+const BUSY_MESSAGE = '다른 실행이 이 글을 처리하고 있습니다. 잠시 후 다시 시도해주세요.';
+
+function averageScore(plan: ImagePlan | null) {
+  const scores = plan ? [plan.cover, ...plan.sections].map((s) => s.score).filter((n): n is number => n !== undefined) : [];
+  return scores.length ? (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1) : '-';
+}
+
+// Plan S6 — 본문의 AI 이미지를 지우고 새 계획으로 이미지 세트를 처음부터 다시 만든다.
+export async function rebuildImageSet(postId: number, deadline = requestDeadline()) {
+  const post = await prisma.post.findUnique({ where: { id: postId } });
+  if (!post) throw new PipelineError('글을 찾을 수 없습니다.', 404);
+  if (post.status === 'PUBLISHED') throw new PipelineError('이미 발행한 글은 이미지 세트를 다시 만들 수 없습니다.', 409);
+  if (post.stage !== 'READY' && post.stage !== 'IMAGES') {
+    throw new PipelineError('본문이 완성된 글(이미지 단계 이후)만 이미지 세트를 다시 만들 수 있습니다.', 409);
+  }
+  // Plan SC-4 — 한 번에 약 $0.35. 계획(imagePlan)은 지워지므로 횟수는 활동 기록으로 센다.
+  const recent = await prisma.systemLog.count({
+    where: { event: 'IMAGE_REBUILD', message: { startsWith: `#${postId} ` }, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60_000) } },
+  });
+  if (recent >= maxRebuilds()) {
+    throw new PipelineError(`이미지 세트는 24시간에 ${maxRebuilds()}번까지 다시 만들 수 있습니다. 장면별 다시 생성을 써주세요.`, 429);
+  }
+  // 초기화와 잠금을 한 번에 해서, 그 사이 크론이 이 글을 가져가지 못하게 한다.
+  const reset = await prisma.post.updateMany({
+    where: { id: postId, ...unlockedWhere() },
+    data: { content: stripAiImages(post.content), imagePlan: null, stage: 'IMAGES', stageError: null, lockedUntil: new Date(Date.now() + LOCK_MS) },
+  });
+  if (reset.count !== 1) throw new PipelineError(BUSY_MESSAGE, 409);
+  const previous = post.imagePlan ? (JSON.parse(post.imagePlan) as ImagePlan) : null;
+  await prisma.systemLog
+    .create({ data: { event: 'IMAGE_REBUILD', message: `#${postId} "${post.title}" 이미지 세트 다시 만들기 (이전 관련성 평균 ${averageScore(previous)})` } })
+    .catch(() => {});
+  return advancePost(postId, deadline, { claimed: true });
 }
 
 export async function createPipelinePost(input: { brief: Brief; inboxId?: number | null }) {
@@ -290,18 +367,25 @@ async function runStage(current: Post): Promise<Post> {
         plan = await planImageSet(post);
         post = await prisma.post.update({ where, data: { imagePlan: JSON.stringify(plan) } });
       }
-      const provider = imageProvider();
       for (const scene of [plan.cover, ...plan.sections]) {
-        if (scene.url) continue;
+        if (scene.url && scene.checked) continue;
         // 장면마다 저장하므로, 시간이 부족하면 여기서 멈추고 다음 실행이 남은 장면부터 이어간다.
         if (remainingTime() < MIN_STAGE_MS) return post;
-        const seed = randomSeed();
-        const isCover = scene === plan.cover;
-        const image = await provider.render({ prompt: scene.prompt, must: scene.must, avoid: scene.avoid, style: plan.style, width: 800, height: isCover ? 400 : 450, seed });
-        scene.url = image.url;
-        scene.seed = seed;
-        plan.provider = image.provider;
+        if (scene.url) {
+          // 이어하기: 이미지는 만들었지만 채점 전에 멈춘 장면
+          await scoreScene(scene, { url: scene.url });
+        } else {
+          const { image, seed } = await renderScene(plan, scene);
+          scene.url = image.url;
+          scene.seed = seed;
+          await scoreScene(scene, image);
+        }
         post = await prisma.post.update({ where, data: { imagePlan: JSON.stringify(plan) } });
+        // Plan SC: 관련성 점수가 낮은 장면만, 렌더와 채점을 마칠 시간이 남을 때 한 번 다시 만든다.
+        if (needsRetry(scene, plan) && remainingTime() >= RETRY_MIN_MS) {
+          await retryScene(plan, scene);
+          post = await prisma.post.update({ where, data: { imagePlan: JSON.stringify(plan) } });
+        }
       }
       return prisma.post.update({
         where,
@@ -321,6 +405,8 @@ export function requestDeadline() {
 
 // 남은 시간이 이보다 적으면 새 단계를 시작하지 않는다.
 const MIN_STAGE_MS = 20_000;
+// 재시도는 렌더(최대 40초)와 채점(최대 30초)을 둘 다 끝낼 시간이 있을 때만 한다.
+const RETRY_MIN_MS = 60_000;
 // 단계 실행 중 잠금. 크론과 이어하기가 다른 인스턴스에서 같은 글을 동시에 처리하지 않게 한다.
 const LOCK_MS = 5 * 60_000;
 
@@ -349,10 +435,15 @@ async function logPostResult(before: Post, after: Post, startedAt: number) {
   if (entry) await prisma.systemLog.create({ data: entry }).catch(() => {});
 }
 
-export async function advancePost(postId: number, deadline = requestDeadline(), options: { clearError?: boolean } = {}): Promise<Post> {
+// claimed: 호출한 쪽이 이미 잠금을 잡았다(세트 다시 만들기).
+export async function advancePost(
+  postId: number,
+  deadline = requestDeadline(),
+  options: { clearError?: boolean; claimed?: boolean } = {},
+): Promise<Post> {
   let post = await prisma.post.findUnique({ where: { id: postId } });
   if (!post) throw new Error('글을 찾을 수 없습니다.');
-  if (post.stage === 'READY' || !(await claimPost(postId))) return post;
+  if (post.stage === 'READY' || (!options.claimed && !(await claimPost(postId)))) return post;
   const startPost = post;
   const startedAt = Date.now();
   try {
