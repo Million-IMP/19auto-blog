@@ -7,7 +7,7 @@
 > **Author**: jeh-lab (with Claude)
 > **Date**: 2026-10-18
 > **Status**: Draft
-> **선행 사이클**: [image-relevance 보고서](../../archive/2026-10/image-relevance/image-relevance.report.md)
+> **선행 사이클**: [image-relevance 보고서](../image-relevance/image-relevance.report.md)
 
 ---
 

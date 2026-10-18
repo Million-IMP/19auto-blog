@@ -114,6 +114,7 @@ const SCENE_RULES = `- 먼저 anchor를 정합니다: 그 소제목의 핵심 �
   예: "a person seen from behind adjusting settings on a laptop at a home desk, the screen showing a blurred unreadable dashboard, a small smart home hub on the shelf beside it, medium shot, eye level, 35mm lens, soft window light from the left, calm focused mood, negative space on the right"
 - 사람은 뒷모습·옆모습·기기를 다루는 손까지 그릴 수 있습니다. 얼굴 클로즈업과 군중 장면은 피합니다(왜곡이 잦음).
 - 앱·웹 화면이 필요하면 "blurred, unreadable interface"로 씁니다. 이미지 안에 읽히는 글자·숫자·로고·도표, 실제 인물, 실제 상표를 넣지 않습니다.
+- 종이·노트·화이트보드·체크리스트처럼 글자가 들어갈 자리는 빈 줄·빈 칸으로만 그립니다. "번호 매긴 단계", "목록", "메모 쓰기"를 장면으로 고르지 말고, prompt에 numbered·written·list 같은 글자를 부르는 말을 쓰지 않습니다(운영 #42에서 노트에 엉터리 숫자가 그려졌다).
 - 은유(열쇠·돋보기·저울·실타래 같은 상징물)는 anchor가 순수한 개념일 때만 씁니다. 그때도 글에 나오는 구체 사물이나 상황을 함께 둡니다. 한 글 안에서 같은 소재를 반복하지 않습니다.
 - 블로그 썸네일로 잘려도 되도록 여백을 둡니다.
 - must에는 anchor의 영어 묘사를 반드시 넣고, 반드시 보여야 할 요소를 영어 쉼표 목록으로 씁니다. avoid는 나오면 안 되는 요소를 영어 쉼표 목록으로 씁니다.
@@ -522,6 +523,7 @@ ${SCENE_RULES}
 [감점하지 않는 것]
 - 화면·문서의 글자와 숫자가 흐리거나 읽히지 않는 것 (일부러 흐리게 그립니다). 단, 보여야 할 대상이 화면 속 내용 자체라면 흐려서 알아볼 수 없을 때 3점 이하입니다.
 - 색·재질이 대상 묘사와 다른 것 (화풍이 정합니다)
+화면 밖(종이·노트·간판·물건)에 알아볼 수 있는 글자·숫자·손글씨가 있으면 작아도 3점 이하입니다.
 이 두 가지 말고는 위 기준대로 채점합니다. 손·얼굴 왜곡이나 크게 읽히는 글자는 여전히 1점입니다.
 
 아래 형식의 JSON만 <score> 태그 안에 출력하세요. 다른 설명은 쓰지 않습니다. reason은 무엇이 보이고 무엇이 빠졌는지 한국어 한 문장(60자 이내)입니다.

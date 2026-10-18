@@ -7,7 +7,7 @@
 > **Author**: jeh-lab (with Claude)
 > **Date**: 2026-10-18
 > **Status**: Draft
-> **Planning Doc**: [image-relevance-v2.plan.md](../../01-plan/features/image-relevance-v2.plan.md)
+> **Planning Doc**: [image-relevance-v2.plan.md](./image-relevance-v2.plan.md)
 
 ---
 
