@@ -72,9 +72,9 @@
 
 | Phase | Document | Status |
 |-------|----------|--------|
-| Plan | [mobile-overflow.plan.md](../01-plan/features/mobile-overflow.plan.md) | ✅ v0.2 |
-| Design | [mobile-overflow.design.md](../02-design/features/mobile-overflow.design.md) | ✅ v0.2 |
-| Check | [mobile-overflow.analysis.md](../03-analysis/mobile-overflow.analysis.md) | ✅ v0.2 (100%) |
+| Plan | [mobile-overflow.plan.md](./mobile-overflow.plan.md) | ✅ v0.2 |
+| Design | [mobile-overflow.design.md](./mobile-overflow.design.md) | ✅ v0.2 |
+| Check | [mobile-overflow.analysis.md](./mobile-overflow.analysis.md) | ✅ v0.2 (100%) |
 | Act | 현재 문서 | ✅ |
 
 ---

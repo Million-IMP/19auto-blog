@@ -1,7 +1,7 @@
 // 휴대폰 너비(390·430px)에서 화면이 오른쪽으로 넘치거나 잘리는지 점검한다. 버튼을 누르지 않고 화면만 읽는다.
 // 실행: 운영 사이트나 localhost:5173 탭의 개발자도구 콘솔에 이 파일 내용을 붙여 넣는다.
 //       크롬이 붙여넣기를 막으면 콘솔에 allow pasting 을 입력한 뒤 다시 붙여 넣는다.
-// 측정 규칙: docs/02-design/features/mobile-overflow.design.md §5
+// 측정 규칙: docs/archive/2026-10/mobile-overflow/mobile-overflow.design.md §5
 (async () => {
   const PATHS = ['/', '/inbox', '/activity', '/topics', '/materials', '/rules', '/posts']; // frontend/src/App.tsx 라우트와 맞춘다
   const WIDTHS = [390, 430];

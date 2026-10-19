@@ -5,7 +5,7 @@
 > **Project**: 19auto-blog
 > **Analyst**: jeh-lab
 > **Date**: 2026-10-19
-> **Design Doc**: [mobile-overflow.design.md](../02-design/features/mobile-overflow.design.md)
+> **Design Doc**: [mobile-overflow.design.md](./mobile-overflow.design.md)
 
 분석 방식: 구현이 파일 1개(122줄) + 문서 한 줄이라 gap-detector 에이전트 없이 설계 문서와 코드를 직접 대조했다. 런타임은 Chrome MCP로 운영 사이트에서 실행했다.
 
@@ -57,7 +57,7 @@
 
 ## 1. Analysis Overview
 
-- **Design Document**: `docs/02-design/features/mobile-overflow.design.md`
+- **Design Document**: `docs/archive/2026-10/mobile-overflow/mobile-overflow.design.md`
 - **Implementation**: `scripts/check-mobile-overflow.js`, `CLAUDE.md` 검증 순서 5번
 - **Analysis Date**: 2026-10-19
 
@@ -214,7 +214,7 @@ Match Rate **90.9%** — 기준(90%) 통과. Important 1건, Minor 2건.
 |----------|------|------|
 | 🟡 1 | I-1 line-clamp 제외 | `scripts/check-mobile-overflow.js` |
 | 🟢 2 | M-1 자가검사 로딩 실패 문구 | `scripts/check-mobile-overflow.js` |
-| 🟢 3 | M-2 설계 문서 갱신 | `docs/02-design/features/mobile-overflow.design.md` |
+| 🟢 3 | M-2 설계 문서 갱신 | `docs/archive/2026-10/mobile-overflow/mobile-overflow.design.md` |
 | — | §5.4 출력 줄 런타임 확인: 콘솔 메서드를 감싸 로그를 배열에 모은 뒤 재실행 | 검증 방법 |
 
 ---
