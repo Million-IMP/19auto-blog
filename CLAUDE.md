@@ -17,6 +17,7 @@
 2. 프론트 린트: `npm run lint --prefix frontend`
 3. 프론트 빌드(타입체크 포함): `npm run build --prefix frontend`
 4. 백엔드 테스트: `npm test --prefix backend` (vitest, DB·AI는 mock). 화면 동작은 `npm start` 후 화면/`curl http://localhost:3001/api/stats`로 확인한다.
+5. 화면을 바꿨으면 휴대폰 너비 점검: 운영 또는 `localhost:5173` 탭 개발자도구 콘솔에 `scripts/check-mobile-overflow.js` 내용을 붙여 넣는다 (7개 페이지 × 390·430px, 넘침 0이면 통과).
 
 ## 구조
 ```
