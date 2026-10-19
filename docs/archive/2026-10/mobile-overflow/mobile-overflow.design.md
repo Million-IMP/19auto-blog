@@ -6,7 +6,7 @@
 > **Author**: jeh-lab
 > **Date**: 2026-10-19
 > **Status**: Draft
-> **Planning Doc**: [mobile-overflow.plan.md](../../01-plan/features/mobile-overflow.plan.md)
+> **Planning Doc**: [mobile-overflow.plan.md](./mobile-overflow.plan.md)
 
 ---
 
@@ -251,7 +251,7 @@ HTML 요소 `el`이 다음을 모두 만족하면 숨김 잘림으로 센다.
 scripts/
 └── check-mobile-overflow.js   (새 파일, 약 90줄)
 CLAUDE.md                      (검증 순서에 5번 한 줄 추가)
-docs/01-plan/features/mobile-overflow.plan.md (SC-1 결과 기록)
+docs/archive/2026-10/mobile-overflow/mobile-overflow.plan.md (SC-1 결과 기록)
 ```
 
 ### 11.2 Implementation Order

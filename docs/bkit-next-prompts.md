@@ -4,18 +4,18 @@
 bkit 자동화 L1(단계마다 확인) → 각 단계 끝나면 **"다음 진행"** 입력 → 머지는 내가 말할 때만.
 
 ## 지금 상태
-- master `d7ee451` (PR #23까지 머지·배포). 운영: https://19auto-blog.vercel.app
-- 커밋 안 된 것: `docs/gpters-presentation/` (발표 자료), 이 파일
-- 끝난 PDCA: palette-mobile, image-relevance(v1·v2) → `docs/archive/2026-10/`
+- master `edc1660` (PR #25까지 머지·배포). 운영: https://19auto-blog.vercel.app
+- 커밋 안 된 것: 없음 (발표 자료는 PR #24로 머지)
+- 끝난 PDCA: palette-mobile, image-relevance(v1·v2), mobile-overflow → `docs/archive/2026-10/`
 - 관찰 중: ai-token-warning (문서는 `docs/01-plan~04-report/ai-token-warning.*`) — 10/25쯤 활동 기록 "AI 길이 경고" 확인 후 제한 조정 → archive
 - 결정 기록: gbrain `decisions/19auto-blog-image-relevance`, `decisions/19auto-blog-ai-token-warning`, `decisions/19auto-blog-mobile-overflow`
-- mobile-overflow: 보고서까지 완료(브랜치 `feat/mobile-overflow`), archive 남음
+- mobile-overflow: PR #25 머지·배포(10/19), archive 완료
 
 ## 보완 후보 (추천 순서)
 
 | # | 기능 이름 | 내용 | 크기 |
 |---|---|---|---|
-| ~~1~~ | ~~`mobile-overflow`~~ | **완료 10/19** — 재현 안 됨(운영 14/14·실폰 잘림 없음). 점검 스니펫 `scripts/check-mobile-overflow.js` 추가. 보고서 `docs/04-report/mobile-overflow.report.md` | — |
+| ~~1~~ | ~~`mobile-overflow`~~ | **완료 10/19** — 재현 안 됨(운영 14/14·실폰 잘림 없음). 점검 스니펫 `scripts/check-mobile-overflow.js` 추가. 보고서 `docs/archive/2026-10/mobile-overflow/mobile-overflow.report.md` | — |
 | 2 | `local-test-db` | 로컬 `backend/.env`의 DATABASE_URL이 운영 DB일 수 있어 매번 로컬 서버 검사를 건너뜀. 운영 글 사본을 로컬 SQLite에 넣어 서버·화면을 띄우는 방법 | 중간 |
 | 3 | `prod-ui-check` | 운영 화면 실제 확인: 이미지 관련성 배지·"이미지 세트 다시 만들기" 버튼·"AI 길이 경고" 배지 (v1부터 화면 확인 못 함). **10/19 발견: `/posts` 글 이미지 `/api/images/*.png` 6개가 503** — 먼저 원인 확인 | 작음 |
 | 4 | `ai-call-cleanup` | aiService의 직접 호출 3곳(processInboxItem·generateOSMUContent·quickSummarizeArticle) 반복 코드를 askText(system 옵션)로 합치기 | 작음 |
