@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>콘텐츠 발행 자동화 워크플로우 — 개발 리뷰</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700;900&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap">
+<style>
+  :root { --paper:#EBE2D3; --ink:#2A211C; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#3A2F28; color:#F3EADF; font-family:'IBM Plex Sans KR', Arial, sans-serif; }
+  header { padding:24px 32px; display:flex; flex-wrap:wrap; gap:12px 24px; align-items:center; justify-content:space-between; }
+  header h1 { margin:0; font-size:20px; font-weight:700; }
+  header p { margin:0; font-size:14px; color:#D9CBBB; }
+  main { display:flex; flex-direction:column; gap:40px; padding:0 32px 64px; max-width:1280px; margin:0 auto; }
+  .frame { position:relative; width:100%; aspect-ratio:16/9; overflow:hidden; border-radius:8px; box-shadow:0 12px 32px rgba(0,0,0,.35); }
+  .scale { position:absolute; left:0; top:0; width:1920px; height:1080px; transform-origin:0 0; word-break:keep-all; }
+  .scale section { position:relative; width:1920px; height:1080px; overflow:hidden; }
+  .scale h1, .scale h2, .scale h3, .scale p, .scale table { margin:0; }
+  .scale table { border-collapse:collapse; width:100%; }
+  .scale th, .scale td { padding:.35em .6em; border-top:1px solid #DDD0BE; text-align:left; }
+  .scale a { color:inherit; }
+  .notes { margin:14px 4px 0; font-size:15px; line-height:1.7; color:#D9CBBB; }
+  body.present { overflow:hidden; background:#000; }
+  body.present header, body.present .notes { display:none; }
+  body.present main { padding:0; max-width:none; gap:0; }
+  body.present .item { display:none; }
+  body.present .item.on { display:flex; align-items:center; justify-content:center; width:100vw; height:100vh; }
+  body.present .frame { width:min(100vw, calc(100vh * 16 / 9)); border-radius:0; box-shadow:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>콘텐츠 발행 자동화 워크플로우 — 개발 리뷰</h1>
+  <p>P 또는 슬라이드 클릭: 발표 모드 · ← → 넘기기 · Esc 나가기 · 아래 글은 발표 대본</p>
+</header>
+<main>
+<div class="item" id="s1"><div class="frame"><div class="scale"><section id="cover" data-transition="fade" style="background:#231C18;color:#F3EADF;font-family:'IBM Plex Sans KR', Arial, sans-serif;padding:128px;display:flex;flex-direction:row;align-items:center;gap:80px">
+<div style="width:860px;display:flex;flex-direction:column;gap:36px">
+<p style="font-size:28px;font-weight:500;color:#E0A77E;letter-spacing:2px">GPTERS 24기 · 콘텐츠발행자동화</p>
+<h1 style="font-family:'Noto Serif KR', Georgia, serif;font-size:88px;font-weight:900;line-height:1.15;color:#F8F1E7">콘텐츠 발행 자동화 워크플로우, 그 후 4일</h1>
+<p style="font-size:32px;line-height:1.5;color:#D9CBBB">베스트 발표 이후의 디벨롭 리뷰 — bkit으로 계획부터 검증까지</p>
+<div style="display:flex;flex-direction:column;gap:8px;border-top:2px solid #5A4A3F;padding:28px 0 0 0">
+<p style="font-size:28px;font-weight:700;color:#F8F1E7">발표자 MJK (Million.JK, 이진구)</p>
+<p style="font-size:26px;color:#BFAE9C">2026. 10. 19 · 콘텐츠&amp;지식 발표회</p>
+</div>
+</div>
+<img src="images/final-dashboard.png" alt="지금의 AutoBlog 편집국 대시보드 화면" style="width:724px;height:452px;object-fit:cover;border-radius:16px;border:2px solid #5A4A3F;box-shadow:0 24px 64px rgba(0,0,0,0.45)">
+
+</section>
+</div></div><p class="notes"><b>1.</b> 안녕하세요, GPTERS 24기 콘텐츠발행자동화 과정의 MJK, 이진구입니다. 지난 목요일 발표에서 베스트 발표자로 뽑혀 오늘 이 자리에 섰습니다. 오늘은 목요일 이후 4일 동안 워크플로우를 어떻게 디벨롭했는지, 특히 "기능은 됐는데 검증이 부족했다"는 숙제를 bkit이라는 도구로 어떻게 풀었는지 15분 동안 리뷰하겠습니다. 오른쪽이 오늘 기준 실제 사이트 화면입니다.</p></div>
+<div class="item" id="s2"><div class="frame"><div class="scale"><section id="recap" data-transition="fade" style="background:#F5EFE6;color:#2A211C;font-family:'IBM Plex Sans KR', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:26px;font-weight:700;color:#9A5532;letter-spacing:2px">지난 목요일 10/15 · 베스트 발표자 선정</p>
+<h2 style="font-family:'Noto Serif KR', Georgia, serif;font-size:64px;font-weight:700;line-height:1.15;color:#2A211C">수집부터 발행 대기까지, 6단계 파이프라인</h2>
+</div>
+<div style="display:flex;flex-direction:row;gap:16px">
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FCF8F2;border:1px solid #DDD0BE;border-top:6px solid #9A5532;border-radius:12px;padding:28px 24px">
+<p style="font-size:26px;font-weight:700;color:#9A5532">01</p>
+<h3 style="font-size:34px;font-weight:700;color:#2A211C">수집</h3>
+<p style="font-size:24px;line-height:1.45;color:#54473D">RSS · URL · 메모</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FCF8F2;border:1px solid #DDD0BE;border-top:6px solid #9A5532;border-radius:12px;padding:28px 24px">
+<p style="font-size:26px;font-weight:700;color:#9A5532">02</p>
+<h3 style="font-size:34px;font-weight:700;color:#2A211C">글감 보드</h3>
+<p style="font-size:24px;line-height:1.45;color:#54473D">독자 질문 · 답의 빈틈 평가</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FCF8F2;border:1px solid #DDD0BE;border-top:6px solid #9A5532;border-radius:12px;padding:28px 24px">
+<p style="font-size:26px;font-weight:700;color:#9A5532">03</p>
+<h3 style="font-size:34px;font-weight:700;color:#2A211C">재료 · 규칙</h3>
+<p style="font-size:24px;line-height:1.45;color:#54473D">강의 원칙을 글 틀과 규칙으로</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FCF8F2;border:1px solid #DDD0BE;border-top:6px solid #9A5532;border-radius:12px;padding:28px 24px">
+<p style="font-size:26px;font-weight:700;color:#9A5532">04</p>
+<h3 style="font-size:34px;font-weight:700;color:#2A211C">단계형 초안</h3>
+<p style="font-size:24px;line-height:1.45;color:#54473D">출처 → 목차 → 본문 → 교정</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FCF8F2;border:1px solid #DDD0BE;border-top:6px solid #9A5532;border-radius:12px;padding:28px 24px">
+<p style="font-size:26px;font-weight:700;color:#9A5532">05</p>
+<h3 style="font-size:34px;font-weight:700;color:#2A211C">이미지 세트</h3>
+<p style="font-size:24px;line-height:1.45;color:#54473D">Ideogram 표지 + 소제목별</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FCF8F2;border:1px solid #DDD0BE;border-top:6px solid #9A5532;border-radius:12px;padding:28px 24px">
+<p style="font-size:26px;font-weight:700;color:#9A5532">06</p>
+<h3 style="font-size:34px;font-weight:700;color:#2A211C">발행 확인</h3>
+<p style="font-size:24px;line-height:1.45;color:#54473D">중복 방지 · 공개 화면 확인</p>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:14px;background:#EBE2D3;border-radius:12px;padding:32px 36px">
+<p style="font-size:26px;font-weight:700;color:#9A5532">강의에서 가져온 원칙 5가지</p>
+<p style="font-size:30px;line-height:1.5;color:#2A211C">단계형 파이프라인 · 원본 하나 → 여러 채널(OSMU) · 근거 구분 · 이미지는 글 단위로 통일 · "생성"은 "발행"이 아니다</p>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1000px;font-size:24px;color:#7A6A5D">GPTERS 24기 콘텐츠발행자동화 · MJK</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;font-size:24px;color:#7A6A5D;text-align:right">02</p>
+
+</section>
+</div></div><p class="notes"><b>2.</b> 지난 목요일 발표 내용을 30초만 다시 보겠습니다. 강의 1·2주차 원칙을 제 블로그 자동화 도구에 그대로 옮겼습니다. 수집, 글감 보드, 재료와 규칙, 단계형 초안, 이미지 세트, 발행 확인까지 6단계입니다. 초안은 출처 확인부터 교정까지 단계마다 저장돼서 실패한 단계부터 이어서 할 수 있습니다.</p></div>
+<div class="item" id="s3"><div class="frame"><div class="scale"><section id="then-screens" data-transition="fade" style="background:#EBE2D3;color:#2A211C;font-family:'IBM Plex Sans KR', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:26px;font-weight:700;color:#9A5532;letter-spacing:2px">10/15 발표 때의 사이트</p>
+<h2 style="font-family:'Noto Serif KR', Georgia, serif;font-size:64px;font-weight:700;line-height:1.15;color:#2A211C">그때의 워크플로우 화면</h2>
+</div>
+<div style="display:flex;flex-direction:row;gap:28px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px">
+<img src="images/then-dashboard.png" alt="10월 15일 발표 때의 대시보드: 흰 바탕과 남색 사이드바" style="width:536px;height:372px;object-fit:contain;background:#FCF8F2;border:1px solid #D2C3AE;border-radius:12px">
+<h3 style="font-size:30px;font-weight:700;color:#2A211C">대시보드</h3>
+<p style="font-size:24px;line-height:1.45;color:#54473D">숫자 카드 4개와 자동 작성 설정</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px">
+<img src="images/then-posts.png" alt="발행 대기열: 단계 진행 표시와 표지 이미지" style="width:536px;height:372px;object-fit:contain;background:#FCF8F2;border:1px solid #D2C3AE;border-radius:12px">
+<h3 style="font-size:30px;font-weight:700;color:#2A211C">발행 대기열</h3>
+<p style="font-size:24px;line-height:1.45;color:#54473D">단계 진행 표시 · 표지와 설명글</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px">
+<img src="images/then-image-plan.png" alt="이미지 계획: 장면별 필수·제외 요소와 다시 생성 버튼" style="width:536px;height:372px;object-fit:contain;background:#FCF8F2;border:1px solid #D2C3AE;border-radius:12px">
+<h3 style="font-size:30px;font-weight:700;color:#2A211C">이미지 계획</h3>
+<p style="font-size:24px;line-height:1.45;color:#54473D">장면별 필수 · 제외 요소, 다시 생성</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1000px;font-size:24px;color:#7A6A5D">GPTERS 24기 콘텐츠발행자동화 · MJK</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;font-size:24px;color:#7A6A5D;text-align:right">03</p>
+
+</section>
+</div></div><p class="notes"><b>3.</b> 목요일 발표 때 보여드린 화면입니다. 왼쪽부터 대시보드, 발행 대기열, 이미지 계획 화면입니다. 기능은 이때 이미 대부분 있었습니다. 다만 흰 바탕에 남색 사이드바, 전형적인 관리자 템플릿 느낌이었습니다.</p></div>
+<div class="item" id="s4"><div class="frame"><div class="scale"><section id="homework" data-transition="fade" style="background:#F5EFE6;color:#2A211C;font-family:'IBM Plex Sans KR', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:56px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:26px;font-weight:700;color:#9A5532;letter-spacing:2px">발표 후 돌아보니</p>
+<h2 style="font-family:'Noto Serif KR', Georgia, serif;font-size:64px;font-weight:700;line-height:1.15;color:#2A211C">기능은 됐는데, 남은 숙제 세 가지</h2>
+</div>
+<div style="display:flex;flex-direction:row;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:20px;background:#FCF8F2;border:1px solid #DDD0BE;border-radius:16px;padding:44px 40px">
+<p style="font-family:'Noto Serif KR', Georgia, serif;font-size:96px;font-weight:900;line-height:1;color:#9A5532">01</p>
+<h3 style="font-size:44px;font-weight:700;color:#2A211C">검증</h3>
+<p style="font-size:30px;line-height:1.5;color:#54473D">기능은 대부분 구현했지만, 실제로 돌려 보고 확인한 것은 적었다</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:20px;background:#FCF8F2;border:1px solid #DDD0BE;border-radius:16px;padding:44px 40px">
+<p style="font-family:'Noto Serif KR', Georgia, serif;font-size:96px;font-weight:900;line-height:1;color:#9A5532">02</p>
+<h3 style="font-size:44px;font-weight:700;color:#2A211C">디자인</h3>
+<p style="font-size:30px;line-height:1.5;color:#54473D">관리자 템플릿 같은 화면, 흐름이 한눈에 안 보이고 휴대폰 확인도 안 됨</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:20px;background:#FCF8F2;border:1px solid #DDD0BE;border-radius:16px;padding:44px 40px">
+<p style="font-family:'Noto Serif KR', Georgia, serif;font-size:96px;font-weight:900;line-height:1;color:#9A5532">03</p>
+<h3 style="font-size:44px;font-weight:700;color:#2A211C">이미지 품질</h3>
+<p style="font-size:30px;line-height:1.5;color:#54473D">글을 테스트해 보니 그림이 글 내용과 따로 놀았다</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1000px;font-size:24px;color:#7A6A5D">GPTERS 24기 콘텐츠발행자동화 · MJK</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;font-size:24px;color:#7A6A5D;text-align:right">04</p>
+
+</section>
+</div></div><p class="notes"><b>4.</b> 발표가 끝나고 돌아보니 숙제가 세 가지 남아 있었습니다. 첫째, 검증입니다. 기능은 다 만들었는데 실제로 돌려서 확인한 건 많지 않았습니다. 둘째, 디자인입니다. 셋째, 이미지 품질입니다. 글을 테스트해 보니 그림이 글 내용과 잘 맞지 않았습니다. 오늘 발표는 이 세 가지를 어떻게 풀었는지에 대한 이야기입니다.</p></div>
+<div class="item" id="s5"><div class="frame"><div class="scale"><section id="tools" data-transition="fade" style="background:#EBE2D3;color:#2A211C;font-family:'IBM Plex Sans KR', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:56px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:26px;font-weight:700;color:#9A5532;letter-spacing:2px">10/15 → 10/18</p>
+<h2 style="font-family:'Noto Serif KR', Georgia, serif;font-size:64px;font-weight:700;line-height:1.15;color:#2A211C">어떤 AI 도구로 만들었나</h2>
+</div>
+<div style="display:flex;flex-direction:row;align-items:center;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:24px;background:#FCF8F2;border:1px solid #D2C3AE;border-radius:16px;padding:44px 40px">
+<p style="font-size:26px;font-weight:700;color:#7A6A5D">~ 10/15 · 기능 구현</p>
+<h3 style="font-size:40px;font-weight:700;color:#2A211C">세 가지 AI를 번갈아 가며</h3>
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:28px;background:#EBE2D3;border-radius:999px;padding:10px 24px;color:#2A211C">Claude Code · Sonnet 5.5 (x-high)</p>
+<p style="font-size:28px;background:#EBE2D3;border-radius:999px;padding:10px 24px;color:#2A211C">Gemini · 3.8 Flash (high)</p>
+<p style="font-size:28px;background:#EBE2D3;border-radius:999px;padding:10px 24px;color:#2A211C">Grok · 4.7</p>
+</div>
+<p style="font-size:28px;line-height:1.5;color:#54473D">기능은 빠르게 늘었지만 검증은 부족</p>
+</div>
+<svg style="width:88px;height:44px;flex:none" viewBox="0 0 100 50" preserveAspectRatio="none" aria-hidden="true"><polygon points="0,15 60,15 60,0 100,25 60,50 60,35 0,35" fill="#9A5532"/></svg>
+<div style="flex:1;display:flex;flex-direction:column;gap:24px;background:#231C18;border-radius:16px;padding:44px 40px">
+<p style="font-size:26px;font-weight:700;color:#E0A77E">10/16 ~ 10/18 · 검증 · 보완</p>
+<h3 style="font-size:40px;font-weight:700;color:#F8F1E7">한 도구 + 검증 플러그인</h3>
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:28px;background:#3A2F28;border-radius:999px;padding:10px 24px;color:#F3EADF">Claude Code · Opus 5.5 (x-high)</p>
+<p style="font-size:28px;background:#9A5532;border-radius:999px;padding:10px 24px;color:#FBF5EE;font-weight:700">+ bkit 플러그인 (PDCA)</p>
+</div>
+<p style="font-size:28px;line-height:1.5;color:#D9CBBB">계획 → 설계 → 구현 → 검수 → 보고를 한 루프로</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1000px;font-size:24px;color:#7A6A5D">GPTERS 24기 콘텐츠발행자동화 · MJK</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;font-size:24px;color:#7A6A5D;text-align:right">05</p>
+
+</section>
+</div></div><p class="notes"><b>5.</b> 목요일 발표까지는 Claude Code의 Sonnet 5.5, Gemini 3.8 Flash, Grok 4.7을 번갈아 쓰면서 워크플로우를 보완했습니다. 기능은 빨리 늘었는데, 도구가 바뀔 때마다 맥락이 끊기고 검증은 늘 뒤로 밀렸습니다. 그래서 발표 이후에는 Claude Code Opus 5.5 하나로 정리하고, 계획부터 검증까지 한 번에 도는 bkit 플러그인을 붙였습니다.</p></div>
+<div class="item" id="s6"><div class="frame"><div class="scale"><section id="mockups" data-transition="fade" style="background:#F5EFE6;color:#2A211C;font-family:'IBM Plex Sans KR', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:26px;font-weight:700;color:#9A5532;letter-spacing:2px">디자인 보완 · 10/16</p>
+<h2 style="font-family:'Noto Serif KR', Georgia, serif;font-size:64px;font-weight:700;line-height:1.15;color:#2A211C">대시보드 시안 A · B · C</h2>
+</div>
+<div style="display:flex;flex-direction:row;gap:28px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px">
+<img src="images/mock-a.png" alt="시안 A: 흰 바탕과 인디고, 상단 5칸 파이프라인 줄" style="width:536px;height:335px;object-fit:cover;border:1px solid #D2C3AE;border-radius:12px">
+<h3 style="font-size:32px;font-weight:700;color:#2A211C">A · 파이프라인 라이트</h3>
+<p style="font-size:24px;line-height:1.45;color:#54473D">흰 바탕 + 인디고, 상단 5칸 진행 줄</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px">
+<img src="images/mock-b.png" alt="시안 B: 종이색과 테라코타, 명조 제목, 원형 단계 스테퍼" style="width:536px;height:335px;object-fit:cover;border:1px solid #D2C3AE;border-radius:12px">
+<h3 style="font-size:32px;font-weight:700;color:#2A211C">B · 웜 에디토리얼</h3>
+<p style="font-size:24px;line-height:1.45;color:#54473D">종이색 + 테라코타, 명조 제목</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px">
+<img src="images/mock-c.png" alt="시안 C: 다크 바탕과 청록, 아이콘 레일, 5열 칸반 보드" style="width:536px;height:335px;object-fit:cover;border:4px solid #9A5532;border-radius:12px">
+<h3 style="font-size:32px;font-weight:700;color:#9A5532">C · 보드 콘솔 — 채택</h3>
+<p style="font-size:24px;line-height:1.45;color:#54473D">다크 + 청록, 5열 칸반 보드</p>
+</div>
+</div>
+<p style="font-size:28px;line-height:1.5;color:#2A211C;background:#EBE2D3;border-radius:12px;padding:24px 32px">C안을 고른 이유: 수집 → 글감 → 재료·규칙 → 초안 → 발행 대기, 글이 어디쯤 있는지 한눈에 보인다</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1000px;font-size:24px;color:#7A6A5D">GPTERS 24기 콘텐츠발행자동화 · MJK</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;font-size:24px;color:#7A6A5D;text-align:right">06</p>
+
+</section>
+</div></div><p class="notes"><b>6.</b> 디자인은 대시보드 한 장짜리 시안을 세 가지 만들어 비교했습니다. A는 흰 바탕에 인디고, B는 종이색에 테라코타와 명조 제목, C는 어두운 바탕에 5열 칸반 보드입니다. 저는 C를 골랐습니다. 글 하나가 수집부터 발행 대기까지 지금 어디에 있는지가 한눈에 보이기 때문입니다.</p></div>
+<div class="item" id="s7"><div class="frame"><div class="scale"><section id="c-adopt" data-transition="fade" style="background:#EBE2D3;color:#2A211C;font-family:'IBM Plex Sans KR', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:26px;font-weight:700;color:#9A5532;letter-spacing:2px">C안 적용 전 → 후</p>
+<h2 style="font-family:'Noto Serif KR', Georgia, serif;font-size:64px;font-weight:700;line-height:1.15;color:#2A211C">숫자 카드에서 5열 파이프라인 보드로</h2>
+</div>
+<div style="display:flex;flex-direction:row;align-items:center;gap:24px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px">
+<img src="images/then-dashboard.png" alt="적용 전 대시보드: 숫자 카드 4개" style="width:780px;height:480px;object-fit:contain;background:#FCF8F2;border:1px solid #D2C3AE;border-radius:12px">
+<p style="font-size:28px;font-weight:700;color:#7A6A5D">전 · 10/15</p>
+</div>
+<svg style="width:56px;height:28px;flex:none" viewBox="0 0 100 50" preserveAspectRatio="none" aria-hidden="true"><polygon points="0,15 60,15 60,0 100,25 60,50 60,35 0,35" fill="#9A5532"/></svg>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px">
+<img src="images/c-after-dashboard.jpg" alt="적용 후 대시보드: 어두운 바탕의 5열 파이프라인 보드" style="width:780px;height:480px;object-fit:contain;background:#14171C;border:1px solid #D2C3AE;border-radius:12px">
+<p style="font-size:28px;font-weight:700;color:#9A5532">후 · 10/16 (C안)</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1000px;font-size:24px;color:#7A6A5D">GPTERS 24기 콘텐츠발행자동화 · MJK</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;font-size:24px;color:#7A6A5D;text-align:right">07</p>
+
+</section>
+</div></div><p class="notes"><b>7.</b> C안을 실제로 적용한 전후입니다. 왼쪽은 숫자 카드 네 개가 전부였던 목요일 화면, 오른쪽은 C안을 적용한 화면입니다. 수집 186건, 재료·규칙 6개, 발행 대기 28건처럼 칸마다 글이 쌓여 있어서 병목이 어디인지 바로 보입니다.</p></div>
+<div class="item" id="s8"><div class="frame"><div class="scale"><section id="final" data-transition="fade" style="background:#F5EFE6;color:#2A211C;font-family:'IBM Plex Sans KR', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:26px;font-weight:700;color:#9A5532;letter-spacing:2px">최종 화면 · 10/18</p>
+<h2 style="font-family:'Noto Serif KR', Georgia, serif;font-size:64px;font-weight:700;line-height:1.15;color:#2A211C">지금의 AutoBlog 편집국</h2>
+</div>
+<div style="display:flex;flex-direction:row;gap:48px;align-items:start">
+<img src="images/final-dashboard.png" alt="최종 대시보드: 종이색 화면, AutoBlog 편집국 제목과 5열 파이프라인" style="width:1000px;height:625px;object-fit:cover;border:1px solid #D2C3AE;border-radius:12px;box-shadow:0 16px 40px rgba(42,33,28,0.18)">
+<div style="flex:1;display:flex;flex-direction:column;gap:28px">
+<div style="display:flex;flex-direction:column;gap:8px;border-left:4px solid #9A5532;padding:4px 0 4px 24px">
+<h3 style="font-size:32px;font-weight:700;color:#2A211C">화면 테마 3가지</h3>
+<p style="font-size:26px;line-height:1.45;color:#54473D">어두운 · 흰 · 종이(기본). C안 보드 구조는 그대로</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;border-left:4px solid #9A5532;padding:4px 0 4px 24px">
+<h3 style="font-size:32px;font-weight:700;color:#2A211C">명령창 Ctrl K</h3>
+<p style="font-size:26px;line-height:1.45;color:#54473D">검색 · 이동 · 붙여넣기 수집, 휴대폰에서도</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;border-left:4px solid #9A5532;padding:4px 0 4px 24px">
+<h3 style="font-size:32px;font-weight:700;color:#2A211C">이미지 관련성 점수</h3>
+<p style="font-size:26px;line-height:1.45;color:#54473D">장면마다 점수와 이유, 세트 다시 만들기</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;border-left:4px solid #9A5532;padding:4px 0 4px 24px">
+<h3 style="font-size:32px;font-weight:700;color:#2A211C">사용후기 게시판</h3>
+<p style="font-size:26px;line-height:1.45;color:#54473D">동기 여러분의 소감을 바로 받기</p>
+</div>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1000px;font-size:24px;color:#7A6A5D">GPTERS 24기 콘텐츠발행자동화 · MJK</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;font-size:24px;color:#7A6A5D;text-align:right">08</p>
+
+</section>
+</div></div><p class="notes"><b>8.</b> 이게 어젯밤 기준 최종 화면입니다. C안의 5열 보드 구조는 그대로 두고, 화면 테마를 어두운 화면, 흰 화면, 종이 화면 세 가지로 늘렸습니다. 기본은 종이 화면입니다. 명령창은 휴대폰에서도 키보드에 가리지 않게 고쳤고, 이미지마다 관련성 점수가 붙습니다. 대시보드 아래에는 사용후기 게시판이 있습니다.</p></div>
+<div class="item" id="s9"><div class="frame"><div class="scale"><section id="bkit" data-transition="fade" style="background:#231C18;color:#F3EADF;font-family:'IBM Plex Sans KR', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:row;gap:72px">
+<div style="width:740px;display:flex;flex-direction:column;gap:32px">
+<p style="font-size:26px;font-weight:700;color:#E0A77E;letter-spacing:2px">도구 소개 · Claude Code 플러그인</p>
+<h2 style="font-family:'Noto Serif KR', Georgia, serif;font-size:64px;font-weight:700;line-height:1.2;color:#F8F1E7">bkit: 계획부터 검증까지 한 번에</h2>
+<p style="font-size:30px;line-height:1.55;color:#D9CBBB">AI가 만든 코드를 자기가 쓴 설계서와 대조해 검증하는 플러그인. PDCA(Plan · Do · Check · Act) 루프를 단계마다 사람에게 확인받으며 돌린다.</p>
+<div style="display:flex;flex-direction:column;gap:12px;background:#3A2F28;border-radius:12px;padding:28px 32px">
+<p style="font-size:24px;color:#BFAE9C">시작은 명령 한 줄, 이후는 한마디</p>
+<p style="font-family:'Courier New', monospace;font-size:30px;font-weight:700;color:#F8F1E7">/bkit:pdca plan 기능이름</p>
+<p style="font-size:30px;font-weight:700;color:#E0A77E">→ "다음 진행"</p>
+</div>
+<p style="font-size:26px;line-height:1.5;color:#BFAE9C">자동화 단계 L0~L4 중 L1(단계마다 확인)으로 사용</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:14px;justify-content:center">
+<div style="display:flex;flex-direction:row;align-items:center;gap:24px;background:#2E2520;border-radius:12px;padding:18px 24px">
+<p style="width:150px;font-size:26px;font-weight:700;color:#E0A77E">Plan</p>
+<p style="flex:1;font-size:26px;color:#F3EADF">계획서 · 성공 기준</p>
+</div>
+<div style="display:flex;flex-direction:row;align-items:center;gap:24px;background:#2E2520;border-radius:12px;padding:18px 24px">
+<p style="width:150px;font-size:26px;font-weight:700;color:#E0A77E">Design</p>
+<p style="flex:1;font-size:26px;color:#F3EADF">설계안 A·B·C 중 선택</p>
+</div>
+<div style="display:flex;flex-direction:row;align-items:center;gap:24px;background:#2E2520;border-radius:12px;padding:18px 24px">
+<p style="width:150px;font-size:26px;font-weight:700;color:#E0A77E">Do</p>
+<p style="flex:1;font-size:26px;color:#F3EADF">구현 + 검증 4단계</p>
+</div>
+<div style="display:flex;flex-direction:row;align-items:center;gap:24px;background:#9A5532;border-radius:12px;padding:18px 24px">
+<p style="width:150px;font-size:26px;font-weight:700;color:#FBF5EE">Check</p>
+<p style="flex:1;font-size:26px;color:#FBF5EE">설계 일치율 + 코드 분석</p>
+</div>
+<div style="display:flex;flex-direction:row;align-items:center;gap:24px;background:#2E2520;border-radius:12px;padding:18px 24px">
+<p style="width:150px;font-size:26px;font-weight:700;color:#E0A77E">Act</p>
+<p style="flex:1;font-size:26px;color:#F3EADF">검수에서 나온 문제 수정</p>
+</div>
+<div style="display:flex;flex-direction:row;align-items:center;gap:24px;background:#2E2520;border-radius:12px;padding:18px 24px">
+<p style="width:150px;font-size:26px;font-weight:700;color:#E0A77E">Report</p>
+<p style="flex:1;font-size:26px;color:#F3EADF">보고서 · 커밋 · PR</p>
+</div>
+<div style="display:flex;flex-direction:row;align-items:center;gap:24px;background:#2E2520;border-radius:12px;padding:18px 24px">
+<p style="width:150px;font-size:26px;font-weight:700;color:#E0A77E">Archive</p>
+<p style="flex:1;font-size:26px;color:#F3EADF">문서 보관</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1000px;font-size:24px;color:#BFAE9C">GPTERS 24기 콘텐츠발행자동화 · MJK</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;font-size:24px;color:#BFAE9C;text-align:right">09</p>
+
+</section>
+</div></div><p class="notes"><b>9.</b> bkit을 한 장으로 소개하겠습니다. Claude Code에 설치하는 플러그인으로, AI가 만든 코드를 자기가 쓴 설계서와 대조해서 검증해 줍니다. 계획, 설계, 구현, 검수, 수정, 보고, 보관이 하나의 루프입니다. 핵심은 Check 단계입니다. 설계와 코드가 얼마나 일치하는지 점수로 매기고, 비용·보안·동시성 문제를 따로 분석합니다. 단계마다 "이 범위가 맞나요?", "설계안 셋 중 무엇?"처럼 사람에게 물어봐서, 저는 거의 "다음 진행"만 입력했습니다.</p></div>
+<div class="item" id="s10"><div class="frame"><div class="scale"><section id="cycles" data-transition="fade" style="background:#F5EFE6;color:#2A211C;font-family:'IBM Plex Sans KR', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:26px;font-weight:700;color:#9A5532;letter-spacing:2px">10/16 ~ 10/18 · PR 7개</p>
+<h2 style="font-family:'Noto Serif KR', Georgia, serif;font-size:64px;font-weight:700;line-height:1.15;color:#2A211C">PDCA를 네 바퀴 돌렸다</h2>
+</div>
+<table style="font-size:28px;color:#2A211C;background:#FCF8F2;border:1px solid #DDD0BE;border-radius:12px">
+<tr style="background:#EBE2D3"><th style="width:26%">기능</th><th style="width:30%">한 일</th><th style="width:18%;text-align:right">설계 일치율</th><th style="width:12%;text-align:right">테스트</th><th style="width:14%;text-align:right">PR</th></tr>
+<tr><td>palette-mobile</td><td>명령창 휴대폰 대응</td><td style="text-align:right">99%</td><td style="text-align:right">27</td><td style="text-align:right">#17 #18</td></tr>
+<tr><td>image-relevance</td><td>이미지 채점 · 다시 만들기</td><td style="text-align:right">94.8 → 99.2%</td><td style="text-align:right">45</td><td style="text-align:right">#19 #20</td></tr>
+<tr><td>image-relevance-v2</td><td>대상은 하나 · 채점 규칙 정리</td><td style="text-align:right">98 → 100%</td><td style="text-align:right">74</td><td style="text-align:right">#21 #22</td></tr>
+<tr><td>ai-token-warning</td><td>AI 응답 길이 경고</td><td style="text-align:right">98 → 100%</td><td style="text-align:right">90</td><td style="text-align:right">#23</td></tr>
+</table>
+<p style="font-size:28px;line-height:1.5;color:#54473D">일치율의 "→"는 검수 뒤 수정(Act)을 거친 값. 테스트는 사이클이 끝났을 때의 자동 테스트 수.</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1000px;font-size:24px;color:#7A6A5D">GPTERS 24기 콘텐츠발행자동화 · MJK</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;font-size:24px;color:#7A6A5D;text-align:right">10</p>
+
+</section>
+</div></div><p class="notes"><b>10.</b> 목요일 이후 사흘 동안 이 루프를 네 바퀴 돌렸습니다. 명령창 모바일 대응, 이미지 관련성 1차와 2차, 그리고 AI 응답 길이 경고입니다. 매 바퀴마다 검수에서 문제가 나왔고, 고친 뒤 설계 일치율이 95% 안팎에서 100% 가까이 올라갔습니다. 자동 테스트는 27개에서 90개로 늘었습니다. 이제부터는 가장 공을 들인 이미지 품질 이야기를 하겠습니다.</p></div>
+<div class="item" id="s11"><div class="frame"><div class="scale"><section id="img-problem" data-transition="fade" style="background:#EBE2D3;color:#2A211C;font-family:'IBM Plex Sans KR', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:36px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:26px;font-weight:700;color:#9A5532;letter-spacing:2px">이미지 품질 · 문제</p>
+<h2 style="font-family:'Noto Serif KR', Georgia, serif;font-size:64px;font-weight:700;line-height:1.15;color:#2A211C">그림이 글과 따로 놀았다</h2>
+</div>
+<div style="display:flex;flex-direction:row;gap:40px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<img src="images/before-42.png" alt="수정 전 #42 연결 방식 소제목 이미지: 점토 질감의 상징적인 교차로와 장치" style="width:520px;height:292px;object-fit:cover;border-radius:12px">
+<p style="font-size:24px;line-height:1.4;color:#54473D">#42 「어떤 연결 방식을 지원하나요?」 · 3점</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px">
+<img src="images/before-43.png" alt="수정 전 #43 기능 끄기 소제목 이미지: 점토 질감의 다이얼과 상자" style="width:520px;height:292px;object-fit:cover;border-radius:12px">
+<p style="font-size:24px;line-height:1.4;color:#54473D">#43 「비밀번호 검사 기능을 끄려면?」 · 2점</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:8px;background:#231C18;border-radius:12px;padding:32px">
+<p style="font-size:24px;color:#BFAE9C">운영 글 3편 관련성 평균 (5점 만점)</p>
+<p style="font-family:'Noto Serif KR', Georgia, serif;font-size:48px;font-weight:900;color:#F8F1E7">3.6 · 2.3 · 3.2</p>
+<p style="font-size:24px;color:#BFAE9C">#42 · #43 · #44</p>
+</div>
+</div>
+<div style="display:flex;flex-direction:row;gap:24px">
+<div style="flex:1;display:flex;flex-direction:column;gap:8px;background:#FCF8F2;border:1px solid #D2C3AE;border-radius:12px;padding:24px 28px">
+<h3 style="font-size:30px;font-weight:700;color:#2A211C">상징물만 그림</h3>
+<p style="font-size:24px;line-height:1.45;color:#54473D">글 속 실제 대상 없이 점토 소품 같은 은유</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px;background:#FCF8F2;border:1px solid #D2C3AE;border-radius:12px;padding:24px 28px">
+<h3 style="font-size:30px;font-weight:700;color:#2A211C">예시 색이 번짐</h3>
+<p style="font-size:24px;line-height:1.45;color:#54473D">프롬프트 예시의 청록 · 주황이 모든 글에</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:8px;background:#FCF8F2;border:1px solid #D2C3AE;border-radius:12px;padding:24px 28px">
+<h3 style="font-size:30px;font-weight:700;color:#2A211C">확인 장치 없음</h3>
+<p style="font-size:24px;line-height:1.45;color:#54473D">그림이 글과 맞는지 아무도 보지 않음</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1000px;font-size:24px;color:#7A6A5D">GPTERS 24기 콘텐츠발행자동화 · MJK</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;font-size:24px;color:#7A6A5D;text-align:right">11</p>
+
+</section>
+</div></div><p class="notes"><b>11.</b> 이미지 문제부터 보겠습니다. 왼쪽은 "어떤 연결 방식을 지원하나요?" 소제목에 들어간 그림, 가운데는 "비밀번호 검사 기능을 끄려면?"에 들어간 그림입니다. 예쁘긴 한데 글 내용과는 거의 상관이 없습니다. 원인을 bkit 계획 단계에서 세 가지로 정리했습니다. 글 속 실제 대상 없이 상징물만 그렸고, 프롬프트 예시에 넣은 색이 모든 글에 번졌고, 그림이 글과 맞는지 확인하는 장치가 없었습니다. 그래서 운영 글 세 편을 AI로 채점해 보니 평균 3.6, 2.3, 3.2점이었습니다.</p></div>
+<div class="item" id="s12"><div class="frame"><div class="scale"><section id="img-solution" data-transition="fade" style="background:#F5EFE6;color:#2A211C;font-family:'IBM Plex Sans KR', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:26px;font-weight:700;color:#9A5532;letter-spacing:2px">이미지 품질 · 해결</p>
+<h2 style="font-family:'Noto Serif KR', Georgia, serif;font-size:64px;font-weight:700;line-height:1.15;color:#2A211C">대상을 먼저 정하고, AI가 보고 채점한다</h2>
+</div>
+<div style="display:flex;flex-direction:row;align-items:center;gap:12px">
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FCF8F2;border:1px solid #DDD0BE;border-radius:12px;padding:28px 24px">
+<p style="font-size:24px;font-weight:700;color:#9A5532">1</p>
+<h3 style="font-size:30px;font-weight:700;color:#2A211C">대상 정하기</h3>
+<p style="font-size:24px;line-height:1.45;color:#54473D">본문에 나오는 실제 사물 · 행동 하나</p>
+</div>
+<svg style="width:36px;height:18px;flex:none" viewBox="0 0 100 50" preserveAspectRatio="none" aria-hidden="true"><polygon points="0,15 60,15 60,0 100,25 60,50 60,35 0,35" fill="#9A5532"/></svg>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FCF8F2;border:1px solid #DDD0BE;border-radius:12px;padding:28px 24px">
+<p style="font-size:24px;font-weight:700;color:#9A5532">2</p>
+<h3 style="font-size:30px;font-weight:700;color:#2A211C">화풍 고르기</h3>
+<p style="font-size:24px;line-height:1.45;color:#54473D">뉴스는 사진풍, 개념은 일러스트</p>
+</div>
+<svg style="width:36px;height:18px;flex:none" viewBox="0 0 100 50" preserveAspectRatio="none" aria-hidden="true"><polygon points="0,15 60,15 60,0 100,25 60,50 60,35 0,35" fill="#9A5532"/></svg>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FCF8F2;border:1px solid #DDD0BE;border-radius:12px;padding:28px 24px">
+<p style="font-size:24px;font-weight:700;color:#9A5532">3</p>
+<h3 style="font-size:30px;font-weight:700;color:#2A211C">생성</h3>
+<p style="font-size:24px;line-height:1.45;color:#54473D">Ideogram, 한 글은 한 화풍</p>
+</div>
+<svg style="width:36px;height:18px;flex:none" viewBox="0 0 100 50" preserveAspectRatio="none" aria-hidden="true"><polygon points="0,15 60,15 60,0 100,25 60,50 60,35 0,35" fill="#9A5532"/></svg>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#9A5532;border-radius:12px;padding:28px 24px">
+<p style="font-size:24px;font-weight:700;color:#FBF5EE">4</p>
+<h3 style="font-size:30px;font-weight:700;color:#FBF5EE">AI 채점</h3>
+<p style="font-size:24px;line-height:1.45;color:#FBF5EE">그림을 보고 1~5점과 이유</p>
+</div>
+<svg style="width:36px;height:18px;flex:none" viewBox="0 0 100 50" preserveAspectRatio="none" aria-hidden="true"><polygon points="0,15 60,15 60,0 100,25 60,50 60,35 0,35" fill="#9A5532"/></svg>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FCF8F2;border:1px solid #DDD0BE;border-radius:12px;padding:28px 24px">
+<p style="font-size:24px;font-weight:700;color:#9A5532">5</p>
+<h3 style="font-size:30px;font-weight:700;color:#2A211C">다시 만들기</h3>
+<p style="font-size:24px;line-height:1.45;color:#54473D">3점 미만만, 글당 최대 2장</p>
+</div>
+</div>
+<div style="display:flex;flex-direction:row;gap:24px">
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#EBE2D3;border-radius:12px;padding:28px 32px">
+<p style="font-size:24px;font-weight:700;color:#9A5532">v1 대상 예시</p>
+<p style="font-size:28px;line-height:1.45;color:#2A211C">"카드 서랍장 / a wall of card drawers"</p>
+<p style="font-size:24px;line-height:1.45;color:#54473D">한국어로 고르고, 이미지 모델에는 영어만 보낸다</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;background:#EBE2D3;border-radius:12px;padding:28px 32px">
+<p style="font-size:24px;font-weight:700;color:#9A5532">v2에서 더한 규칙</p>
+<p style="font-size:28px;line-height:1.45;color:#2A211C">대상은 개념 하나, 화면 속 내용은 대상 금지</p>
+<p style="font-size:24px;line-height:1.45;color:#54473D">"블루투스·LAN·인터넷"처럼 나열하면 코드가 찾아 다시 계획</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1000px;font-size:24px;color:#7A6A5D">GPTERS 24기 콘텐츠발행자동화 · MJK</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;font-size:24px;color:#7A6A5D;text-align:right">12</p>
+
+</section>
+</div></div><p class="notes"><b>12.</b> 해결 방법은 다섯 단계입니다. 먼저 소제목 본문에 실제로 나오는 대상 하나를 정합니다. 글 종류에 따라 화풍을 고르고, 이미지를 만든 뒤에는 AI가 그 그림을 직접 보고 1점에서 5점까지 채점합니다. 3점 미만이면 한 단계 높은 품질로 다시 만들고, 비용이 넘치지 않게 글당 2장까지만 합니다. 2차에서는 대상을 개념 하나로 좁혔습니다. "블루투스·LAN·인터넷"처럼 여러 개를 나열하면 그림에 일부만 나와서, 코드가 찾아내 그 장면만 다시 계획하게 했습니다.</p></div>
+<div class="item" id="s13"><div class="frame"><div class="scale"><section id="ba-43" data-transition="fade" style="background:#231C18;color:#F3EADF;font-family:'IBM Plex Sans KR', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:26px;font-weight:700;color:#E0A77E;letter-spacing:2px">전 → 후 · #43 Home Assistant 비밀번호 검사 논란</p>
+<h2 style="font-family:'Noto Serif KR', Georgia, serif;font-size:64px;font-weight:700;line-height:1.15;color:#F8F1E7">「비밀번호 검사 기능을 끄려면?」</h2>
+</div>
+<div style="display:flex;flex-direction:row;gap:48px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px">
+<img src="images/before-43.png" alt="전: 점토 질감의 다이얼과 상자, 기능 끄기와 관계가 약함" style="width:808px;height:455px;object-fit:cover;border-radius:12px">
+<p style="font-size:28px;font-weight:700;color:#BFAE9C">전 · 2점 — 다이얼과 상자, 무엇을 끄는지 안 보임</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px">
+<img src="images/after-43.png" alt="후: 손이 벽걸이 태블릿의 설정 토글을 누르는 사진풍 장면" style="width:808px;height:455px;object-fit:cover;border-radius:12px;border:4px solid #E0A77E">
+<p style="font-size:28px;font-weight:700;color:#E0A77E">후 · 4점 — 벽걸이 태블릿의 설정 토글을 누르는 손</p>
+</div>
+</div>
+<p style="font-size:30px;line-height:1.5;color:#D9CBBB">#43 전체 평균 <b style="color:#F8F1E7">2.3 → 4.0</b> · 뉴스 글이라 사진풍으로 바뀌었다</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1000px;font-size:24px;color:#BFAE9C">GPTERS 24기 콘텐츠발행자동화 · MJK</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;font-size:24px;color:#BFAE9C;text-align:right">13</p>
+
+</section>
+</div></div><p class="notes"><b>13.</b> 가장 크게 바뀐 #43입니다. Home Assistant의 비밀번호 검사 논란을 다룬 뉴스 글인데, "기능을 끄려면?" 소제목에 예전에는 다이얼과 상자 그림이 들어갔습니다. 2점이었습니다. 지금은 벽걸이 태블릿의 설정 토글을 손으로 누르는 장면이고 4점입니다. 뉴스 글이라 화풍도 점토 3D에서 사진풍으로 바뀌었습니다. 글 전체 평균은 2.3에서 4.0이 됐습니다.</p></div>
+<div class="item" id="s14"><div class="frame"><div class="scale"><section id="ba-42" data-transition="fade" style="background:#231C18;color:#F3EADF;font-family:'IBM Plex Sans KR', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:26px;font-weight:700;color:#E0A77E;letter-spacing:2px">전 → 후 · #42 Flipflop 파일 공유 도구</p>
+<h2 style="font-family:'Noto Serif KR', Georgia, serif;font-size:64px;font-weight:700;line-height:1.15;color:#F8F1E7">「어떤 연결 방식을 지원하나요?」</h2>
+</div>
+<div style="display:flex;flex-direction:row;gap:48px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px">
+<img src="images/before-42.png" alt="전: 점토 질감의 교차로와 장치, 연결 방식이 보이지 않음" style="width:808px;height:455px;object-fit:cover;border-radius:12px">
+<p style="font-size:28px;font-weight:700;color:#BFAE9C">전 · 3점 — 상징적인 교차로, 연결 방식이 안 보임</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px">
+<img src="images/after-42.png" alt="후: 손이 공유기에 랜 케이블을 꽂는 사진풍 장면" style="width:808px;height:455px;object-fit:cover;border-radius:12px;border:4px solid #E0A77E">
+<p style="font-size:28px;font-weight:700;color:#E0A77E">후 · 4점 (2번 채점 모두) — 공유기에 랜 케이블을 꽂는 손</p>
+</div>
+</div>
+<p style="font-size:30px;line-height:1.5;color:#D9CBBB">1차에선 "블루투스·LAN·인터넷"을 한 장에 담다 3점 → 2차에서 <b style="color:#F8F1E7">LAN 하나</b>로 좁혀 4점</p>
+<p style="position:absolute;left:128px;bottom:64px;width:1000px;font-size:24px;color:#BFAE9C">GPTERS 24기 콘텐츠발행자동화 · MJK</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;font-size:24px;color:#BFAE9C;text-align:right">14</p>
+
+</section>
+</div></div><p class="notes"><b>14.</b> #42 Flipflop 글의 "어떤 연결 방식을 지원하나요?" 소제목입니다. 원래 그림은 교차로 같은 상징물이었고 3점이었습니다. 1차 개선 때는 블루투스, LAN, 인터넷 세 가지를 한 장에 담으려다 LAN만 보여서 또 3점이었습니다. 2차에서 대상을 개념 하나로 좁히자, 손이 공유기에 랜 케이블을 꽂는 분명한 장면이 나왔고 두 번 채점 모두 4점이었습니다.</p></div>
+<div class="item" id="s15"><div class="frame"><div class="scale"><section id="numbers" data-transition="fade" style="background:#9A5532;color:#FBF5EE;font-family:'IBM Plex Sans KR', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:26px;font-weight:700;color:#F6DEC9;letter-spacing:2px">결과</p>
+<h2 style="font-family:'Noto Serif KR', Georgia, serif;font-size:64px;font-weight:700;line-height:1.15;color:#FBF5EE">숫자로 본 4일</h2>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:28px">
+<div style="display:flex;flex-direction:column;gap:8px;background:#7E4526;border-radius:16px;padding:36px 40px">
+<p style="font-family:'Noto Serif KR', Georgia, serif;font-size:80px;font-weight:900;line-height:1.1;color:#FBF5EE">3.05 → 3.89</p>
+<p style="font-size:28px;line-height:1.45;color:#F6DEC9">운영 글 3편 이미지 관련성 평균 (19장, 5점 만점)</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#7E4526;border-radius:16px;padding:36px 40px">
+<p style="font-family:'Noto Serif KR', Georgia, serif;font-size:80px;font-weight:900;line-height:1.1;color:#FBF5EE">2.3 → 4.0</p>
+<p style="font-size:28px;line-height:1.45;color:#F6DEC9">가장 낮던 #43 글의 평균</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#7E4526;border-radius:16px;padding:36px 40px">
+<p style="font-family:'Noto Serif KR', Georgia, serif;font-size:80px;font-weight:900;line-height:1.1;color:#FBF5EE">27 → 90</p>
+<p style="font-size:28px;line-height:1.45;color:#F6DEC9">자동 테스트 수 (검증 4단계 매번 통과)</p>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px;background:#7E4526;border-radius:16px;padding:36px 40px">
+<p style="font-family:'Noto Serif KR', Georgia, serif;font-size:80px;font-weight:900;line-height:1.1;color:#FBF5EE">약 $0.14</p>
+<p style="font-size:28px;line-height:1.45;color:#F6DEC9">채점 · 다시 만들기로 늘어나는 글당 최대 비용</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1000px;font-size:24px;color:#F6DEC9">GPTERS 24기 콘텐츠발행자동화 · MJK</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;font-size:24px;color:#F6DEC9;text-align:right">15</p>
+
+</section>
+</div></div><p class="notes"><b>15.</b> 숫자로 정리하면 이렇습니다. 운영 글 세 편, 이미지 19장의 관련성 평균이 3.05에서 3.89로 올랐습니다. 가장 낮던 #43은 2.3에서 4.0이 됐습니다. 자동 테스트는 27개에서 90개로 늘었고, 사이클마다 타입체크, 린트, 빌드, 테스트 네 단계를 모두 통과했습니다. 채점과 다시 만들기로 늘어나는 비용은 글 한 편에 최대 14센트 정도로 묶어 뒀습니다.</p></div>
+<div class="item" id="s16"><div class="frame"><div class="scale"><section id="caught" data-transition="fade" style="background:#F5EFE6;color:#2A211C;font-family:'IBM Plex Sans KR', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:40px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:26px;font-weight:700;color:#9A5532;letter-spacing:2px">Check 단계의 값</p>
+<h2 style="font-family:'Noto Serif KR', Georgia, serif;font-size:64px;font-weight:700;line-height:1.15;color:#2A211C">검수가 잡아낸 것들</h2>
+</div>
+<table style="font-size:26px;color:#2A211C;background:#FCF8F2;border:1px solid #DDD0BE;border-radius:12px">
+<tr style="background:#EBE2D3"><th style="width:56%">찾은 문제</th><th style="width:44%">막은 방법</th></tr>
+<tr><td>AI의 생각 토큰까지 길이 제한에 들어가 이미지 계획이 4번 중 1번 잘림</td><td>한도 상향 + 80% 넘으면 경고 기록</td></tr>
+<tr><td>"이미지 세트 다시 만들기"를 무제한 누를 수 있음 (회당 약 $0.35)</td><td>글마다 24시간에 3번</td></tr>
+<tr><td>다시 만드는 중 장면 버튼을 누르면 진행 상황을 덮어씀</td><td>잠금 + 버튼 비활성화</td></tr>
+<tr><td>잘린 AI 응답을 그대로 저장하던 곳 3군데 (OSMU · 요약 · 수집 처리)</td><td>잘리면 오류로 알림</td></tr>
+<tr><td>채점 기준만 바꿔도 점수가 +0.22 오름</td><td>기준 효과를 먼저 재고, 2번 채점</td></tr>
+<tr><td>노트에 엉터리 숫자가 그려진 그림에 채점기는 5점</td><td>사람 눈 점검 → 글자를 부르는 장면 금지</td></tr>
+</table>
+<p style="position:absolute;left:128px;bottom:64px;width:1000px;font-size:24px;color:#7A6A5D">GPTERS 24기 콘텐츠발행자동화 · MJK</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;font-size:24px;color:#7A6A5D;text-align:right">16</p>
+
+</section>
+</div></div><p class="notes"><b>16.</b> bkit을 쓴 가장 큰 이유가 이 장입니다. 검수 단계에서 제가 미처 생각 못 한 문제들이 나왔습니다. AI가 답하기 전에 생각하는 토큰까지 길이 제한에 들어가서 응답이 4번 중 1번 잘렸고, 다시 만들기 버튼은 무제한으로 돈을 쓸 수 있었고, 동시에 누르면 작업이 덮어써졌습니다. 마지막 두 줄이 특히 중요했습니다. 채점 기준만 바꿔도 점수가 오른다는 걸 먼저 재서 목표를 올렸고, 노트에 숫자가 그려진 그림을 채점기는 5점을 줬지만 제가 눈으로 보고 찾아냈습니다.</p></div>
+<div class="item" id="s17"><div class="frame"><div class="scale"><section id="lessons" data-transition="fade" style="background:#EBE2D3;color:#2A211C;font-family:'IBM Plex Sans KR', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:56px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:26px;font-weight:700;color:#9A5532;letter-spacing:2px">돌아보며</p>
+<h2 style="font-family:'Noto Serif KR', Georgia, serif;font-size:64px;font-weight:700;line-height:1.15;color:#2A211C">배운 점 세 가지</h2>
+</div>
+<div style="display:flex;flex-direction:row;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:20px;background:#FCF8F2;border:1px solid #D2C3AE;border-radius:16px;padding:44px 40px">
+<svg style="width:56px;height:56px;flex:none" viewBox="0 0 24 24" fill="none" stroke="#9A5532" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M7 12.5l3.2 3.2L17 9"/></svg>
+<h3 style="font-size:40px;font-weight:700;color:#2A211C">검증을 도구가 챙긴다</h3>
+<p style="font-size:28px;line-height:1.55;color:#54473D">계획 → 설계 → 구현 → 검수 → 보고가 한 루프라, 바쁠 때도 "확인"이 빠지지 않았다</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:20px;background:#FCF8F2;border:1px solid #D2C3AE;border-radius:16px;padding:44px 40px">
+<svg style="width:56px;height:56px;flex:none" viewBox="0 0 24 24" fill="none" stroke="#9A5532" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M2 20h20"/></svg>
+<h3 style="font-size:40px;font-weight:700;color:#2A211C">점수는 흔들린다</h3>
+<p style="font-size:28px;line-height:1.55;color:#54473D">같은 그림도 ±1점. 기준을 바꾸면 그 효과부터 재고, 2번 이상 채점해 비교한다</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:20px;background:#FCF8F2;border:1px solid #D2C3AE;border-radius:16px;padding:44px 40px">
+<svg style="width:56px;height:56px;flex:none" viewBox="0 0 24 24" fill="none" stroke="#9A5532" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+<h3 style="font-size:40px;font-weight:700;color:#2A211C">마지막은 사람 눈</h3>
+<p style="font-size:28px;line-height:1.55;color:#54473D">채점기가 놓친 숫자 그림을 눈으로 찾았다. 자동화할수록 사람이 보는 단계를 남긴다</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1000px;font-size:24px;color:#7A6A5D">GPTERS 24기 콘텐츠발행자동화 · MJK</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;font-size:24px;color:#7A6A5D;text-align:right">17</p>
+
+</section>
+</div></div><p class="notes"><b>17.</b> 배운 점 세 가지입니다. 첫째, 검증을 사람 의지에 맡기지 않고 도구가 루프로 챙기니 바쁠 때도 확인이 빠지지 않았습니다. 둘째, AI 점수는 흔들립니다. 같은 그림도 1점씩 오르내리니 기준을 바꿀 땐 그 효과부터 재고, 두 번 이상 채점해서 비교해야 합니다. 셋째, 마지막 확인은 사람 눈입니다. 자동화할수록 사람이 보는 단계를 일부러 남겨야 합니다.</p></div>
+<div class="item" id="s18"><div class="frame"><div class="scale"><section id="try" data-transition="fade" style="background:#F5EFE6;color:#2A211C;font-family:'IBM Plex Sans KR', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:26px;font-weight:700;color:#9A5532;letter-spacing:2px">GPTERS 24기 동기 여러분께</p>
+<h2 style="font-family:'Noto Serif KR', Georgia, serif;font-size:64px;font-weight:700;line-height:1.15;color:#2A211C">직접 써 보세요, 무료로 열어 두었습니다</h2>
+</div>
+<div style="display:flex;flex-direction:row;gap:32px">
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#231C18;border-radius:16px;padding:44px 48px">
+<p style="font-size:26px;font-weight:700;color:#E0A77E">사이트 · 누구나 바로</p>
+<p style="font-size:48px;font-weight:700;color:#F8F1E7"><a href="https://19auto-blog.vercel.app/">19auto-blog.vercel.app</a></p>
+<p style="font-size:26px;line-height:1.5;color:#D9CBBB">글쓰기 Claude API (Haiku 5.5) · 이미지 Ideogram API (일반 품질) 연결</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:16px;background:#FCF8F2;border:1px solid #D2C3AE;border-radius:16px;padding:44px 48px">
+<p style="font-size:26px;font-weight:700;color:#9A5532">GitHub · 개인용으로 가져가기</p>
+<p style="font-size:32px;font-weight:700;color:#2A211C"><a href="https://github.com/Million-IMP/19auto-blog">github.com/Million-IMP/19auto-blog</a></p>
+<p style="font-size:26px;line-height:1.5;color:#54473D">README의 배포 버튼으로 내 Vercel에 그대로 복제</p>
+</div>
+</div>
+<div style="display:flex;flex-direction:row;align-items:center;gap:28px;background:#EBE2D3;border-radius:16px;padding:32px 40px">
+<svg style="width:56px;height:56px;flex:none" viewBox="0 0 24 24" fill="none" stroke="#9A5532" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>
+<p style="flex:1;font-size:30px;line-height:1.5;color:#2A211C">소감과 문제점은 대시보드 아래 <b>「사용후기 남기기」</b>에 남겨 주세요. 반영해서 더 나은 버전으로 다시 공유하겠습니다.</p>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1000px;font-size:24px;color:#7A6A5D">GPTERS 24기 콘텐츠발행자동화 · MJK</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;font-size:24px;color:#7A6A5D;text-align:right">18</p>
+
+</section>
+</div></div><p class="notes"><b>18.</b> 이 사이트는 모두에게 공개되어 있습니다. 글쓰기는 Claude API의 Haiku 5.5, 이미지는 Ideogram API를 연결해 두었고 무료로 쓰실 수 있으니 마음껏 써 보세요. 코드는 GitHub에도 올려 두었습니다. 가져가서 개인용으로 쓰셔도 됩니다. 써 보시고 소감이나 문제점을 대시보드 아래 사용후기에 남겨 주시면, 반영해서 더 발전된 버전으로 다시 공유드리겠습니다.</p></div>
+<div class="item" id="s19"><div class="frame"><div class="scale"><section id="thanks" data-transition="fade" style="background:#231C18;color:#F3EADF;font-family:'IBM Plex Sans KR', Arial, sans-serif;padding:128px;display:flex;flex-direction:column;justify-content:center;gap:40px">
+<p style="font-size:28px;font-weight:500;color:#E0A77E;letter-spacing:2px">GPTERS 24기 · 콘텐츠발행자동화</p>
+<h1 style="font-family:'Noto Serif KR', Georgia, serif;font-size:120px;font-weight:900;line-height:1.1;color:#F8F1E7">감사합니다</h1>
+<div style="display:flex;flex-direction:column;gap:12px;border-top:2px solid #5A4A3F;padding:32px 0 0 0;width:1200px">
+<p style="font-size:32px;font-weight:700;color:#F8F1E7">MJK (Million.JK, 이진구)</p>
+<p style="font-size:28px;color:#D9CBBB">19auto-blog.vercel.app · github.com/Million-IMP/19auto-blog</p>
+</div>
+
+</section>
+</div></div><p class="notes"><b>19.</b> 들어 주셔서 감사합니다. 질문 받겠습니다.</p></div>
+</main>
+<script>
+  const items = [...document.querySelectorAll('.item')];
+  let current = 0;
+  function fit() {
+    document.querySelectorAll('.frame').forEach((f) => {
+      f.querySelector('.scale').style.transform = 'scale(' + f.clientWidth / 1920 + ')';
+    });
+  }
+  function show(i) {
+    current = Math.max(0, Math.min(items.length - 1, i));
+    items.forEach((it, k) => it.classList.toggle('on', k === current));
+    fit();
+  }
+  function present(on) {
+    document.body.classList.toggle('present', on);
+    if (on) show(current); else { fit(); items[current].scrollIntoView(); }
+  }
+  items.forEach((it, k) => it.querySelector('.frame').addEventListener('click', () => {
+    if (!document.body.classList.contains('present')) { current = k; present(true); } else show(current + 1);
+  }));
+  document.addEventListener('keydown', (e) => {
+    const on = document.body.classList.contains('present');
+    if (e.key === 'p' || e.key === 'P') present(!on);
+    else if (on && (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown')) show(current + 1);
+    else if (on && (e.key === 'ArrowLeft' || e.key === 'PageUp')) show(current - 1);
+    else if (on && e.key === 'Escape') present(false);
+  });
+  window.addEventListener('resize', fit);
+  document.fonts && document.fonts.ready.then(fit);
+  fit();
+</script>
+</body>
+</html>
