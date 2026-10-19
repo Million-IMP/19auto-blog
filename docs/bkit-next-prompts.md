@@ -8,15 +8,16 @@ bkit 자동화 L1(단계마다 확인) → 각 단계 끝나면 **"다음 진행
 - 커밋 안 된 것: `docs/gpters-presentation/` (발표 자료), 이 파일
 - 끝난 PDCA: palette-mobile, image-relevance(v1·v2) → `docs/archive/2026-10/`
 - 관찰 중: ai-token-warning (문서는 `docs/01-plan~04-report/ai-token-warning.*`) — 10/25쯤 활동 기록 "AI 길이 경고" 확인 후 제한 조정 → archive
-- 결정 기록: gbrain `decisions/19auto-blog-image-relevance`, `decisions/19auto-blog-ai-token-warning`
+- 결정 기록: gbrain `decisions/19auto-blog-image-relevance`, `decisions/19auto-blog-ai-token-warning`, `decisions/19auto-blog-mobile-overflow`
+- mobile-overflow: 보고서까지 완료(브랜치 `feat/mobile-overflow`), archive 남음
 
 ## 보완 후보 (추천 순서)
 
 | # | 기능 이름 | 내용 | 크기 |
 |---|---|---|---|
-| 1 | `mobile-overflow` | 휴대폰 너비(430px)에서 대시보드 오른쪽이 잘림 (헤더 "지금 한 바퀴" 버튼·5열 보드). 헤드리스 크롬 캡처로 발견, 실제 휴대폰 확인 필요 | 작음 |
+| ~~1~~ | ~~`mobile-overflow`~~ | **완료 10/19** — 재현 안 됨(운영 14/14·실폰 잘림 없음). 점검 스니펫 `scripts/check-mobile-overflow.js` 추가. 보고서 `docs/04-report/mobile-overflow.report.md` | — |
 | 2 | `local-test-db` | 로컬 `backend/.env`의 DATABASE_URL이 운영 DB일 수 있어 매번 로컬 서버 검사를 건너뜀. 운영 글 사본을 로컬 SQLite에 넣어 서버·화면을 띄우는 방법 | 중간 |
-| 3 | `prod-ui-check` | 운영 화면 실제 확인: 이미지 관련성 배지·"이미지 세트 다시 만들기" 버튼·"AI 길이 경고" 배지 (v1부터 화면 확인 못 함) | 작음 |
+| 3 | `prod-ui-check` | 운영 화면 실제 확인: 이미지 관련성 배지·"이미지 세트 다시 만들기" 버튼·"AI 길이 경고" 배지 (v1부터 화면 확인 못 함). **10/19 발견: `/posts` 글 이미지 `/api/images/*.png` 6개가 503** — 먼저 원인 확인 | 작음 |
 | 4 | `ai-call-cleanup` | aiService의 직접 호출 3곳(processInboxItem·generateOSMUContent·quickSummarizeArticle) 반복 코드를 askText(system 옵션)로 합치기 | 작음 |
 | 5 | `image-abstract-scenes` | 추상적인 소제목("무엇이 달라졌나", "신호와 간섭") 장면이 약함. 글자 유도 장면 금지 규칙(PR #22)도 운영 미확인 | 큼 |
 
