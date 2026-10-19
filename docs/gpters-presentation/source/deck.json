@@ -1,0 +1,21 @@
+{
+  "v": 4,
+  "createdOnFiles": { "v": 1, "at": "2026-10-18T23:30:00+09:00" },
+  "lists": "css",
+  "title": "콘텐츠 발행 자동화 워크플로우 — 개발 리뷰",
+  "order": ["cover", "recap", "then-screens", "homework", "tools", "mockups", "c-adopt", "final", "bkit", "cycles", "img-problem", "img-solution", "ba-43", "ba-42", "numbers", "caught", "lessons", "try", "thanks"],
+  "sections": {
+    "s1": { "description": "발표 소개", "start": "cover" },
+    "s2": { "description": "지난 목요일 발표 다시 보기와 남은 숙제", "start": "recap" },
+    "s3": { "description": "도구와 디자인 디벨롭: 시안 A·B·C에서 지금 화면까지", "start": "tools" },
+    "s4": { "description": "bkit 소개와 PDCA 4바퀴", "start": "bkit" },
+    "s5": { "description": "이미지 품질 개선: 문제, 해결, 전후 비교", "start": "img-problem" },
+    "s6": { "description": "결과와 배운 점", "start": "numbers" },
+    "s7": { "description": "공유와 마무리", "start": "try" }
+  },
+  "faces": {
+    "noto-serif-kr": { "family": "Noto Serif KR", "href": "https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700;900&display=swap" },
+    "ibm-plex-sans-kr": { "family": "IBM Plex Sans KR", "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&display=swap" }
+  },
+  "designSystems": []
+}
