@@ -4,7 +4,8 @@
 bkit 자동화 L1(단계마다 확인) → 각 단계 끝나면 **"다음 진행"** 입력 → 머지는 내가 말할 때만.
 
 ## 지금 상태
-- master `edc1660` (PR #25까지 머지·배포). 운영: https://19auto-blog.vercel.app
+- master `876bccd` (PR #26까지 머지·배포). 운영: https://19auto-blog.vercel.app
+- local-test-db: 10/19 완료, PR 대기 → 이제 로컬 검증은 **`npm run start:local`** (운영 DB 안 건드림, 운영 사본 5초 시드)
 - 커밋 안 된 것: 없음 (발표 자료는 PR #24로 머지)
 - 끝난 PDCA: palette-mobile, image-relevance(v1·v2), mobile-overflow → `docs/archive/2026-10/`
 - 관찰 중: ai-token-warning (문서는 `docs/01-plan~04-report/ai-token-warning.*`) — 10/25쯤 활동 기록 "AI 길이 경고" 확인 후 제한 조정 → archive
@@ -16,8 +17,8 @@ bkit 자동화 L1(단계마다 확인) → 각 단계 끝나면 **"다음 진행
 | # | 기능 이름 | 내용 | 크기 |
 |---|---|---|---|
 | ~~1~~ | ~~`mobile-overflow`~~ | **완료 10/19** — 재현 안 됨(운영 14/14·실폰 잘림 없음). 점검 스니펫 `scripts/check-mobile-overflow.js` 추가. 보고서 `docs/archive/2026-10/mobile-overflow/mobile-overflow.report.md` | — |
-| 2 | `local-test-db` | 로컬 `backend/.env`의 DATABASE_URL이 운영 DB일 수 있어 매번 로컬 서버 검사를 건너뜀. 운영 글 사본을 로컬 SQLite에 넣어 서버·화면을 띄우는 방법 | 중간 |
-| 3 | `prod-ui-check` | 운영 화면 실제 확인: 이미지 관련성 배지·"이미지 세트 다시 만들기" 버튼·"AI 길이 경고" 배지 (v1부터 화면 확인 못 함). **10/19 발견: `/posts` 글 이미지 `/api/images/*.png` 6개가 503** — 먼저 원인 확인 | 작음 |
+| ~~2~~ | ~~`local-test-db`~~ | **완료 10/19** — `npm run start:local`(SQLite 강제·크론 끔·운영 GET 사본). 보고서 `docs/04-report/local-test-db.report.md`. 발견: 10/16부터 로컬 backend가 운영 DB에 붙은 채 떠 있었음(종료함) | — |
+| 3 | `prod-ui-check` | (먼저 `npm run start:local`로 로컬 확인 가능) 운영 화면 실제 확인: 이미지 관련성 배지·"이미지 세트 다시 만들기" 버튼·"AI 길이 경고" 배지 (v1부터 화면 확인 못 함). **10/19 발견: `/posts` 글 이미지 `/api/images/*.png` 6개가 503** — 먼저 원인 확인 | 작음 |
 | 4 | `ai-call-cleanup` | aiService의 직접 호출 3곳(processInboxItem·generateOSMUContent·quickSummarizeArticle) 반복 코드를 askText(system 옵션)로 합치기 | 작음 |
 | 5 | `image-abstract-scenes` | 추상적인 소제목("무엇이 달라졌나", "신호와 간섭") 장면이 약함. 글자 유도 장면 금지 규칙(PR #22)도 운영 미확인 | 큼 |
 

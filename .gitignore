@@ -2,6 +2,7 @@ node_modules
 .env
 *.db
 *.db-journal
+*.db.bak*
 dist
 .bkit
 *.log
