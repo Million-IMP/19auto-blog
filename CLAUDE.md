@@ -7,7 +7,7 @@
 - 로컬 전체 실행: `npm start` (루트) → 의존성 설치, `prisma db push`, backend(3001)·frontend(5173) 동시 기동
 - 운영 DB 안 건드리는 로컬 검증: `npm run start:local` → SQLite 강제·크론 끔, 운영 공개 API(GET)에서 글·재료·규칙·프로필 사본을 `backend/prisma/dev.db`에 채워 실행 (`-- --keep`은 지금 dev.db 유지, `npm run seed:local`은 사본만 다시). `backend/.env`의 DATABASE_URL이 운영 Postgres면 `npm start` 대신 이것을 쓴다
 - 필수 환경변수: `backend/.env`의 `ANTHROPIC_API_KEY` (나머지는 선택)
-- 선택 환경변수: `ANTHROPIC_MODEL`(기본 `claude-haiku-5-5`), `DATABASE_URL`(postgres면 Postgres, 없으면 SQLite), `CRON_SECRET`, `DISABLE_LOCAL_CRON=1`, `IMAGE_PROVIDER=ideogram` + `IDEOGRAM_API_KEY` (배포 시 `BLOB_READ_WRITE_TOKEN` 필요), `APP_PASSWORD`(운영자 비밀번호. 사용후기 삭제에만 쓴다. 사이트 접속은 누구나 가능)
+- 선택 환경변수: `ANTHROPIC_MODEL`(기본 `claude-haiku-5-5`), `DATABASE_URL`(postgres면 Postgres, 없으면 SQLite), `CRON_SECRET`, `DISABLE_LOCAL_CRON=1`, `IMAGE_PROVIDER=ideogram` + `IDEOGRAM_API_KEY` (배포 시 `BLOB_READ_WRITE_TOKEN` 필요), `APP_PASSWORD`(운영자 비밀번호. 사용후기 삭제와 `scripts/relink-local-images.js`의 이미지 주소 교체에만 쓴다. 사이트 접속은 누구나 가능)
 
 ## 패키지 관리
 - **항상 `npm` 사용** (package-lock.json). 루트·backend·frontend 세 곳에 각각 package.json이 있다.

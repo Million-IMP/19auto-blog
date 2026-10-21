@@ -7,7 +7,8 @@ import { getAutomationConfig, runAutomationCycle, updateAutomationConfig } from 
 import { resolveDraftInputs } from './services/writingPlan';
 import { markPublished, verifyPublished } from './services/publishService';
 import { draftFromTopic, evaluateInbox, TOPIC_STATUSES, updateTopic } from './services/topicService';
-import { advancePost, createPipelinePost, getBlogProfile, PipelineError, rebuildImageSet, regenerateImage, requestDeadline, resumePost, updateBlogProfile } from './services/draftPipeline';
+import { advancePost, createPipelinePost, getBlogProfile, PipelineError, rebuildImageSet, regenerateImage, relinkPostImages, requestDeadline, resumePost, updateBlogProfile } from './services/draftPipeline';
+import { parseRelinkPairs } from './services/imageRelink';
 import { createFeedback, deleteFeedback, listFeedback, parseFeedback } from './services/feedbackService';
 import { prisma } from './db';
 import { authStatus, login, logout, requireAdmin } from './auth';
@@ -606,6 +607,19 @@ app.post('/api/posts/:id/images/rebuild', async (req, res) => {
   if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: '잘못된 글 번호입니다.' });
   try {
     res.json(await rebuildImageSet(id, requestDeadline()));
+  } catch (error: any) {
+    res.status(error instanceof PipelineError ? error.status : 500).json({ error: error.message });
+  }
+});
+
+// 3.0.3-2 로컬 이미지 주소(/api/images/…)를 같은 이름의 Blob 주소로 바꾸기 (운영자 전용, scripts/relink-local-images.js가 부른다)
+app.post('/api/posts/:id/images/relink', requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: '잘못된 글 번호입니다.' });
+  const parsed = parseRelinkPairs(req.body?.pairs);
+  if ('error' in parsed) return res.status(400).json({ error: parsed.error });
+  try {
+    res.json(await relinkPostImages(id, parsed.pairs));
   } catch (error: any) {
     res.status(error instanceof PipelineError ? error.status : 500).json({ error: error.message });
   }
