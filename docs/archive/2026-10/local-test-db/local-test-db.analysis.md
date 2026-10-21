@@ -2,8 +2,8 @@
 
 > **Feature**: local-test-db
 > **Date**: 2026-10-19
-> **Plan**: `docs/01-plan/features/local-test-db.plan.md`
-> **Design**: `docs/02-design/features/local-test-db.design.md` (v0.2, 설계안 C)
+> **Plan**: [local-test-db.plan.md](./local-test-db.plan.md)
+> **Design**: [local-test-db.design.md](./local-test-db.design.md) (v0.2, 설계안 C)
 > **Match Rate**: **98% → 100%** (Act-1 후, 런타임 포함 공식)
 
 ---
