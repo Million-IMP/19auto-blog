@@ -1,7 +1,8 @@
-// Design Ref: docs/02-design/features/prod-ui-check.design.md — 로컬(backend/generated-images)에만 저장된 글 이미지를 Blob에 올리고 운영 글 주소를 바꾼다.
+// Design Ref: docs/archive/2026-10/prod-ui-check/prod-ui-check.design.md — 로컬(backend/generated-images)에만 저장된 글 이미지를 Blob에 올리고 운영 글 주소를 바꾼다.
 // node scripts/relink-local-images.js --post 37          → 읽기만 (dry-run, 운영 쓰기 0)
-// node scripts/relink-local-images.js --post 37 --apply  → 백업 → Blob 업로드 → 운영자 로그인 → 주소 교체 → 확인
+// node scripts/relink-local-images.js --post 37 --apply  → 운영자 로그인 → 백업 → Blob 업로드 → 주소 교체 → 확인
 // --apply에는 셸 환경변수 BLOB_READ_WRITE_TOKEN·APP_PASSWORD가 필요하다. 값은 출력하지도 파일에 남기지도 않는다.
+// --skip-upload: 이미 올린 Blob(같은 이름)을 확인만 하고 교체한다. APP_PASSWORD만 필요하다.
 const fs = require('fs');
 const path = require('path');
 
@@ -21,7 +22,7 @@ function parseArgs(argv) {
   const index = argv.indexOf('--post');
   const postId = index >= 0 ? Number(argv[index + 1]) : NaN;
   if (!Number.isInteger(postId) || postId < 1) throw new Error('글 번호가 필요합니다: --post 37');
-  return { postId, apply: argv.includes('--apply') };
+  return { postId, apply: argv.includes('--apply'), skipUpload: argv.includes('--skip-upload') };
 }
 
 function sourceUrl() {
@@ -112,12 +113,29 @@ async function upload(images) {
   return pairs;
 }
 
+// 앞선 실행에서 올린 Blob을 쓴다. 하나라도 없으면 업로드부터 다시 해야 한다.
+async function uploadedPairs(images, store) {
+  if (!store) throw new Error('Blob 스토어 주소를 찾지 못했습니다. --skip-upload 없이 실행하세요.');
+  const pairs = [];
+  for (const image of images) {
+    const to = `${store}/post-images/${image.name}`;
+    const res = await fetch(to, { method: 'HEAD' }).catch(() => null);
+    if (res?.status !== 200) throw new Error(`Blob에 없습니다: ${image.name} — --skip-upload 없이 실행하세요.`);
+    log(`이미 있음: ${image.name}`);
+    pairs.push({ from: image.from, to });
+  }
+  return pairs;
+}
+
 async function loginCookie(base) {
   const res = await fetch(`${base}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ password: process.env.APP_PASSWORD }),
   });
+  if (res.status === 401) {
+    throw new Error('운영자 로그인 실패: 401 비밀번호가 맞지 않습니다. 한/영 입력 상태를 확인하고, 대시보드 사용후기의 "운영자"에서 같은 비밀번호로 먼저 로그인해 보세요.');
+  }
   if (!res.ok) throw new Error(`운영자 로그인 실패: ${res.status}`);
   const cookie = res.headers.getSetCookie().map((c) => c.split(';')[0]).find((c) => c.startsWith('autoblog_session='));
   if (!cookie) throw new Error('운영자 로그인 실패: 세션 쿠키가 없습니다.');
@@ -148,7 +166,7 @@ async function verify(base, postId, pairs, before) {
 }
 
 async function main(argv = process.argv.slice(2)) {
-  const { postId, apply } = parseArgs(argv);
+  const { postId, apply, skipUpload } = parseArgs(argv);
   const base = sourceUrl();
   const posts = await getPosts(base);
   const post = posts.find((p) => p.id === postId);
@@ -163,13 +181,15 @@ async function main(argv = process.argv.slice(2)) {
   if (!apply) return log('dry-run: 운영에 쓰지 않았습니다. 실제로 바꾸려면 --apply');
 
   if (bad.length) throw new Error('--apply 중단: 위 주소를 먼저 확인하세요.');
-  const missingEnv = ['BLOB_READ_WRITE_TOKEN', 'APP_PASSWORD'].filter((key) => !process.env[key]);
+  const required = skipUpload ? ['APP_PASSWORD'] : ['BLOB_READ_WRITE_TOKEN', 'APP_PASSWORD'];
+  const missingEnv = required.filter((key) => !process.env[key]);
   if (missingEnv.length) throw new Error(`--apply 중단: 환경변수가 없습니다: ${missingEnv.join(', ')}`);
 
   const before = snapshot(posts, postId);
-  backup(post);
-  const pairs = await upload(images);
+  // 비밀번호가 틀리면 업로드 전에 멈춘다.
   const cookie = await loginCookie(base);
+  backup(post);
+  const pairs = skipUpload ? await uploadedPairs(images, blobStore(posts)) : await upload(images);
   const result = await relink(base, postId, pairs, cookie);
   log(`교체: 본문 ${result.replaced.content}곳 · 계획 ${result.replaced.imagePlan}장면`);
   if (!(await verify(base, postId, pairs, before))) throw new Error('확인 실패: 위 결과를 보세요.');
@@ -181,6 +201,7 @@ module.exports = { parseArgs, localImages, blobStore, problems, main };
 if (require.main === module) {
   main().catch((error) => {
     console.error(`[relink] ${error.message}`);
-    process.exit(1);
+    // process.exit()는 Windows에서 fetch 연결이 닫히는 중이면 libuv 경고를 찍는다. 자연 종료로 끝낸다.
+    process.exitCode = 1;
   });
 }

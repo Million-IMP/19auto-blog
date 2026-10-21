@@ -6,7 +6,7 @@
 > **Author**: jeh-lab + Claude
 > **Date**: 2026-10-21
 > **Status**: Draft
-> **Plan**: `docs/01-plan/features/prod-ui-check.plan.md`
+> **Plan**: [prod-ui-check.plan.md](./prod-ui-check.plan.md)
 
 ---
 

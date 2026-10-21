@@ -1,6 +1,6 @@
 import type { ImagePlan } from './aiService';
 
-// Design Ref: docs/02-design/features/prod-ui-check.design.md §4.2 — 로컬 이미지 주소(/api/images/…)를
+// Design Ref: docs/archive/2026-10/prod-ui-check/prod-ui-check.design.md §4.2 — 로컬 이미지 주소(/api/images/…)를
 // 같은 파일 이름의 이 프로젝트 Blob 주소로만 바꾼다. 본문과 이미지 계획을 함께 바꿔야 장면 다시 만들기가 본문 그림을 찾는다.
 export type RelinkPair = { from: string; to: string };
 
