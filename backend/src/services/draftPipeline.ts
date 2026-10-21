@@ -3,6 +3,7 @@ import { prisma } from '../db';
 import { aiService, extractUrlText, remainingTime, withDeadline, type DraftContext, type ImagePlan, type ImageScene, type Outline } from './aiService';
 import { imageProvider, randomSeed } from './imageProvider';
 import { hasListedAnchor, maxRebuilds, needsRetry, retryPrompt, retrySpeed, scoreScene, stripAiImages, stripStyleWords } from './imageQuality';
+import { relinkUrls, type RelinkPair } from './imageRelink';
 
 // 상태 코드가 있는 오류. 라우트가 그대로 응답 코드로 쓴다.
 export class PipelineError extends Error {
@@ -207,6 +208,32 @@ export async function regenerateImage(postId: number, index: number) {
     scene.url = image.url;
     scene.seed = seed;
     return await prisma.post.update({ where: { id: postId }, data: { content, imagePlan: JSON.stringify(plan) } });
+  } finally {
+    await prisma.post.updateMany({ where: { id: postId }, data: { lockedUntil: null } });
+  }
+}
+
+// Design Ref: prod-ui-check §4.2 — 로컬에만 저장된 이미지 주소를 이미 올린 같은 이름의 Blob 주소로 바꾼다 (이미지 생성 없음).
+// Blob에 파일이 있는지 먼저 확인하고, regenerateImage와 같은 잠금 안에서 본문·계획을 함께 저장한다.
+export async function relinkPostImages(postId: number, pairs: RelinkPair[]) {
+  const found = await prisma.post.findUnique({ where: { id: postId } });
+  if (!found) throw new PipelineError('글을 찾을 수 없습니다.', 404);
+  const absent = await Promise.all(
+    pairs.map(async ({ to }) => {
+      const res = await fetch(to, { method: 'HEAD', signal: AbortSignal.timeout(5_000) }).catch(() => null);
+      return res?.status === 200 ? null : to.split('/').pop();
+    })
+  );
+  const notUploaded = absent.filter(Boolean);
+  if (notUploaded.length) throw new PipelineError(`Blob에 이미지가 없습니다: ${notUploaded.join(', ')}`, 409);
+  if (!(await claimPost(postId))) throw new PipelineError(BUSY_MESSAGE, 409);
+  try {
+    const post = await prisma.post.findUniqueOrThrow({ where: { id: postId } });
+    if (!post.imagePlan) throw new PipelineError('이미지 계획이 없는 글입니다.', 409);
+    const result = relinkUrls(post.content, JSON.parse(post.imagePlan) as ImagePlan, pairs);
+    if (result.missing.length) throw new PipelineError(`본문/계획에서 주소를 찾지 못했습니다: ${result.missing.join(', ')}`, 409);
+    await prisma.post.update({ where: { id: postId }, data: { content: result.content, imagePlan: JSON.stringify(result.plan) } });
+    return { id: postId, replaced: result.replaced };
   } finally {
     await prisma.post.updateMany({ where: { id: postId }, data: { lockedUntil: null } });
   }

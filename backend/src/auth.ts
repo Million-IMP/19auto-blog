@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import type { NextFunction, Request, Response } from 'express';
 
-// 사이트는 누구나 들어온다. APP_PASSWORD는 운영자 전용 기능(사용후기 삭제)에만 쓴다.
+// 사이트는 누구나 들어온다. APP_PASSWORD는 운영자 전용 기능(사용후기 삭제, 이미지 주소 교체)에만 쓴다.
 const COOKIE = 'autoblog_session';
 const SESSION_MS = 30 * 24 * 60 * 60_000;
 
