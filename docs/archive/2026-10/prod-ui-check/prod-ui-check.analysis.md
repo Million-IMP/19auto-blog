@@ -2,8 +2,8 @@
 
 > **Feature**: prod-ui-check
 > **Date**: 2026-10-21
-> **Plan**: [prod-ui-check.plan.md](../01-plan/features/prod-ui-check.plan.md)
-> **Design**: [prod-ui-check.design.md](../02-design/features/prod-ui-check.design.md) (v0.1, 설계안 C)
+> **Plan**: [prod-ui-check.plan.md](./prod-ui-check.plan.md)
+> **Design**: [prod-ui-check.design.md](./prod-ui-check.design.md) (v0.1, 설계안 C)
 > **Match Rate**: 97% → **100%** (런타임 포함 공식, 운영 `--apply` 후 — §8.2)
 > **구현**: PR #29 (`23e6a3b`, 머지 `7019cc3`, 10/21 운영 배포)
 

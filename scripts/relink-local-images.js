@@ -1,4 +1,4 @@
-// Design Ref: docs/02-design/features/prod-ui-check.design.md — 로컬(backend/generated-images)에만 저장된 글 이미지를 Blob에 올리고 운영 글 주소를 바꾼다.
+// Design Ref: docs/archive/2026-10/prod-ui-check/prod-ui-check.design.md — 로컬(backend/generated-images)에만 저장된 글 이미지를 Blob에 올리고 운영 글 주소를 바꾼다.
 // node scripts/relink-local-images.js --post 37          → 읽기만 (dry-run, 운영 쓰기 0)
 // node scripts/relink-local-images.js --post 37 --apply  → 운영자 로그인 → 백업 → Blob 업로드 → 주소 교체 → 확인
 // --apply에는 셸 환경변수 BLOB_READ_WRITE_TOKEN·APP_PASSWORD가 필요하다. 값은 출력하지도 파일에 남기지도 않는다.

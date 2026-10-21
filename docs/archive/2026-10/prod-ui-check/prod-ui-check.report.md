@@ -66,9 +66,9 @@
 
 ## 2. Related Documents
 
-- Plan: [prod-ui-check.plan.md](../01-plan/features/prod-ui-check.plan.md)
-- Design: [prod-ui-check.design.md](../02-design/features/prod-ui-check.design.md)
-- Analysis: [prod-ui-check.analysis.md](../03-analysis/prod-ui-check.analysis.md)
+- Plan: [prod-ui-check.plan.md](./prod-ui-check.plan.md)
+- Design: [prod-ui-check.design.md](./prod-ui-check.design.md)
+- Analysis: [prod-ui-check.analysis.md](./prod-ui-check.analysis.md)
 
 ---
 
