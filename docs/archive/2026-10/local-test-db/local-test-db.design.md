@@ -6,7 +6,7 @@
 > **Author**: jeh-lab + Claude
 > **Date**: 2026-10-19
 > **Status**: Draft
-> **Plan**: `docs/01-plan/features/local-test-db.plan.md`
+> **Plan**: [local-test-db.plan.md](./local-test-db.plan.md)
 
 ---
 

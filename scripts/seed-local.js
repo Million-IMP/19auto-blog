@@ -1,4 +1,4 @@
-// Design Ref: docs/02-design/features/local-test-db.design.md — 운영 공개 API(GET)만 읽어 로컬 SQLite(dev.db)에 사본을 넣는다.
+// Design Ref: docs/archive/2026-10/local-test-db/local-test-db.design.md — 운영 공개 API(GET)만 읽어 로컬 SQLite(dev.db)에 사본을 넣는다.
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');

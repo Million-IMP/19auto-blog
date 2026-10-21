@@ -1,4 +1,4 @@
-// Design Ref: docs/02-design/features/local-test-db.design.md — 운영 DB를 건드리지 않는 로컬 실행 (SQLite + 운영 사본).
+// Design Ref: docs/archive/2026-10/local-test-db/local-test-db.design.md — 운영 DB를 건드리지 않는 로컬 실행 (SQLite + 운영 사본).
 // npm run start:local            → 운영 사본으로 dev.db를 새로 채우고 실행
 // npm run start:local -- --keep  → 지금 dev.db를 그대로 두고 실행
 const path = require('path');

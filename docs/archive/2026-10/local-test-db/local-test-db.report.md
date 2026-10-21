@@ -66,9 +66,9 @@
 
 ## 2. Related Documents
 
-- Plan: `docs/01-plan/features/local-test-db.plan.md`
-- Design: `docs/02-design/features/local-test-db.design.md` (v0.2)
-- Analysis: `docs/03-analysis/local-test-db.analysis.md`
+- Plan: [local-test-db.plan.md](./local-test-db.plan.md)
+- Design: [local-test-db.design.md](./local-test-db.design.md) (v0.2)
+- Analysis: [local-test-db.analysis.md](./local-test-db.analysis.md)
 
 ---
 
