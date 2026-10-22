@@ -151,9 +151,17 @@ export async function checkResponse(name: string, response: Anthropic.Message, m
   }
 }
 
+type AskOptions = {
+  // 여러 단계가 똑같이 보내는 자료 블록. 프롬프트 맨 앞에 두고 캐시해서 다음 단계는 싸게 읽는다.
+  cachedPrefix?: string;
+  // 응답 형식을 지키게 하는 시스템 문구. 없으면 요청에 넣지 않는다.
+  system?: string;
+};
+
+// Design Ref: ai-call-cleanup §4.1 — 텍스트만 받는 AI 호출은 모두 여기를 거친다 (이미지 채점만 따로).
 // name: 길이 경고에 남는 호출 이름(aiService 메서드 이름).
-// cachedPrefix: 여러 단계가 똑같이 보내는 자료 블록. 프롬프트 맨 앞에 두고 캐시해서 다음 단계는 싸게 읽는다.
-async function askText(name: string, prompt: string, maxTokens: number, cachedPrefix?: string) {
+async function askText(name: string, prompt: string, maxTokens: number, options: AskOptions = {}) {
+  const { cachedPrefix, system } = options;
   const deadline = deadlineStore.getStore() ?? Infinity;
   const remaining = deadline - Date.now();
   if (remaining < 5_000) throw new Error('남은 실행 시간이 부족합니다. 다음 실행에서 이어갑니다.');
@@ -167,6 +175,7 @@ async function askText(name: string, prompt: string, maxTokens: number, cachedPr
     {
       model: AI_MODEL,
       max_tokens: maxTokens,
+      ...(system ? { system } : {}),
       messages: [{ role: 'user', content }],
     },
     Number.isFinite(remaining) ? { timeout: remaining - 2_000, maxRetries: 0 } : undefined
@@ -317,20 +326,9 @@ ${extraContext}
 <keyword>연관 키워드 (MATERIAL인 경우 필수, RULE인 경우 없음)</keyword>
 `;
 
-    const response = await anthropic.messages.create({
-      model: AI_MODEL,
-      max_tokens: 4000,
+    const text = await askText('processInboxItem', prompt, 4000, {
       system: "You are a helpful assistant that only outputs strictly formatted XML.",
-      messages: [{ role: 'user', content: prompt }],
     });
-    await checkResponse('processInboxItem', response, 4000);
-
-    const textBlock = response.content.find((block: any) => block.type === 'text') as any;
-    const text = textBlock?.text || '';
-
-    if (!text) {
-      console.error("AI 응답 디버깅:", JSON.stringify(response, null, 2));
-    }
 
     try {
       const categoryMatch = text.match(/<category>([\s\S]*?)<\/category>/);
@@ -372,7 +370,7 @@ ${input.keyword || '없음 (자료에서 독자가 실제로 검색할 핵심어
 {"keyword": "...", "title": "...", "sections": [{"h2": "...", "answer": "...", "needsSource": false}]}
 </outline>
 `;
-    const text = await askText('generateOutline', prompt, 3000, contextBlock(input));
+    const text = await askText('generateOutline', prompt, 3000, { cachedPrefix: contextBlock(input) });
     const outline = parseJsonTag<Outline>(text, 'outline', '목차');
     outline.sections = Array.isArray(outline.sections)
       ? outline.sections.filter((s) => typeof s?.h2 === 'string' && s.h2.trim() && typeof s.answer === 'string')
@@ -409,7 +407,7 @@ ${input.outline.sections.map((s, i) => `${i + 1}. ## ${s.h2}\n   먼저 답할 �
 ...
 </content>
 `;
-    const text = await askText('generateBody', prompt, 8000, contextBlock(input));
+    const text = await askText('generateBody', prompt, 8000, { cachedPrefix: contextBlock(input) });
     const match = text.match(/<content>([\s\S]*?)<\/content>/);
     const content = (match ? match[1] : text).trim();
     if (content.length < 200) throw new Error('본문 응답이 너무 짧습니다.');
@@ -630,17 +628,7 @@ ${platformGuide}
 출력은 변환된 콘텐츠 텍스트만 바로 출력해주세요.
 `;
 
-    const response = await anthropic.messages.create({
-      model: AI_MODEL,
-      max_tokens: 1500,
-      messages: [{ role: 'user', content: prompt }],
-    });
-    await checkResponse('generateOSMUContent', response, 1500);
-
-    const textBlock = response.content.find((block: any) => block.type === 'text') as any;
-    // 생각만 하고 글 없이 끝나면 빈 초안이 저장되므로 오류로 알린다.
-    if (!textBlock?.text) throw new Error('AI 응답이 비어 있습니다.');
-    return textBlock.text;
+    return askText('generateOSMUContent', prompt, 1500);
   },
 
   // 4. 기사/수집 원문 실시간 AI 3줄 핵심 요약 & 블로그 착안점 도출
@@ -666,16 +654,9 @@ ${text.slice(0, 3500)}
 <keywords>키워드1, 키워드2, 키워드3, 키워드4</keywords>
 `;
 
-    const response = await anthropic.messages.create({
-      model: AI_MODEL,
-      max_tokens: 1000,
+    const raw = await askText('quickSummarizeArticle', prompt, 1000, {
       system: "You are an expert editorial consultant. Output strictly formatted XML tags as instructed.",
-      messages: [{ role: 'user', content: prompt }],
     });
-    await checkResponse('quickSummarizeArticle', response, 1000);
-
-    const textBlock = response.content.find((block: any) => block.type === 'text') as any;
-    const raw = textBlock?.text || '';
 
     const bulletsMatch = raw.match(/<bullets>([\s\S]*?)<\/bullets>/);
     const takeawayMatch = raw.match(/<takeaway>([\s\S]*?)<\/takeaway>/);

@@ -4,14 +4,14 @@
 bkit 자동화 L1(단계마다 확인) → 각 단계 끝나면 **"다음 진행"** 입력 → 머지는 내가 말할 때만.
 
 ## 지금 상태
-- master `7019cc3` (PR #29까지 머지·배포). 운영: https://19auto-blog.vercel.app
+- master `1b5e5b5` (PR #30까지 머지·배포). 운영: https://19auto-blog.vercel.app
 - local-test-db: PR #27 머지·배포(10/20), archive 완료 → 로컬 검증은 **`npm run start:local`** (운영 DB 안 건드림, 운영 사본 5초 시드)
 - prod-ui-check: PR #29 머지·배포(10/21), 운영 #37 이미지 6개 복구, 화면 3가지 확인 완료, archive 완료. 보고서 `docs/archive/2026-10/prod-ui-check/prod-ui-check.report.md`
 - (권장) `APP_PASSWORD` 교체 — 10/21 대화에 값이 남음. Vercel 환경변수 수정 후 다시 배포
 - 커밋 안 된 것: `docs/gpters-presentation/script.md` (미추적, 내용 확인 전이라 커밋 안 함)
-- 끝난 PDCA: palette-mobile, image-relevance(v1·v2), mobile-overflow, local-test-db, prod-ui-check → `docs/archive/2026-10/`
+- 끝난 PDCA: palette-mobile, image-relevance(v1·v2), mobile-overflow, local-test-db, prod-ui-check, ai-call-cleanup → `docs/archive/2026-10/`
 - 관찰 중: ai-token-warning (문서는 `docs/01-plan~04-report/ai-token-warning.*`) — 10/25쯤 활동 기록 "AI 길이 경고" 확인 후 제한 조정 → archive. 10/21 기준 경고 1건: scoreImage 900/1024 (87%, 10/20 00:35)
-- 결정 기록: gbrain `decisions/19auto-blog-image-relevance`, `decisions/19auto-blog-ai-token-warning`, `decisions/19auto-blog-mobile-overflow`, `decisions/19auto-blog-local-test-db`, `decisions/19auto-blog-prod-ui-check`
+- 결정 기록: gbrain `decisions/19auto-blog-image-relevance`, `decisions/19auto-blog-ai-token-warning`, `decisions/19auto-blog-mobile-overflow`, `decisions/19auto-blog-local-test-db`, `decisions/19auto-blog-prod-ui-check`, `decisions/19auto-blog-ai-call-cleanup`
 - mobile-overflow: PR #25 머지·배포(10/19), archive 완료
 
 ## 보완 후보 (추천 순서)
@@ -21,7 +21,7 @@ bkit 자동화 L1(단계마다 확인) → 각 단계 끝나면 **"다음 진행
 | ~~1~~ | ~~`mobile-overflow`~~ | **완료 10/19** — 재현 안 됨(운영 14/14·실폰 잘림 없음). 점검 스니펫 `scripts/check-mobile-overflow.js` 추가. 보고서 `docs/archive/2026-10/mobile-overflow/mobile-overflow.report.md` | — |
 | ~~2~~ | ~~`local-test-db`~~ | **완료 10/19** — `npm run start:local`(SQLite 강제·크론 끔·운영 GET 사본). 보고서 `docs/archive/2026-10/local-test-db/local-test-db.report.md`. 발견: 10/16부터 로컬 backend가 운영 DB에 붙은 채 떠 있었음(종료함) | — |
 | ~~3~~ | ~~`prod-ui-check`~~ | **완료 10/21** — 원인: 10/16 운영 DB에 붙은 로컬 backend가 그림을 PC에 저장. 원본을 Blob에 올리고 운영자 전용 relink로 #37 주소 교체(비용 0). 배지·버튼(누르지 않음)·AI 길이 경고 모두 운영 화면에 보임. 보고서 `docs/archive/2026-10/prod-ui-check/prod-ui-check.report.md` | — |
-| 4 | `ai-call-cleanup` | aiService의 직접 호출 3곳(processInboxItem·generateOSMUContent·quickSummarizeArticle) 반복 코드를 askText(system 옵션)로 합치기 | 작음 |
+| ~~4~~ | ~~`ai-call-cleanup`~~ | **완료 10/22** — 3곳을 askText(`{ system }` 옵션)로 통합, 직접 호출 5곳 → 2곳(askText·scoreImage). 빈 응답 오류만 통일. 보고서 `docs/archive/2026-10/ai-call-cleanup/ai-call-cleanup.report.md` | — |
 | 5 | `image-abstract-scenes` | 추상적인 소제목("무엇이 달라졌나", "신호와 간섭") 장면이 약함. 글자 유도 장면 금지 규칙(PR #22)도 운영 미확인 | 큼 |
 
 ## 붙여 넣을 프롬프트
