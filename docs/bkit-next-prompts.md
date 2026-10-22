@@ -5,7 +5,7 @@ bkit 자동화 L1(단계마다 확인) → 각 단계 끝나면 **"다음 진행
 
 ## 지금 상태
 - master `76162ed` (PR #31까지 머지·배포). 운영: https://19auto-blog.vercel.app
-- image-abstract-scenes: 브랜치 `feat/image-abstract-scenes` PR 머지 대기(10/22). 로컬 3세트(19장, 약 $1.14)로 성공 기준 5/5. 보고서 `docs/archive/2026-10/image-abstract-scenes/image-abstract-scenes.report.md`
+- image-abstract-scenes: PR #32 머지 대기(10/22). 로컬 3세트(19장, 약 $1.14)로 성공 기준 5/5. 보고서 `docs/archive/2026-10/image-abstract-scenes/image-abstract-scenes.report.md`
 - local-test-db: PR #27 머지·배포(10/20), archive 완료 → 로컬 검증은 **`npm run start:local`** (운영 DB 안 건드림, 운영 사본 5초 시드)
 - prod-ui-check: PR #29 머지·배포(10/21), 운영 #37 이미지 6개 복구, 화면 3가지 확인 완료, archive 완료. 보고서 `docs/archive/2026-10/prod-ui-check/prod-ui-check.report.md`
 - (권장) `APP_PASSWORD` 교체 — 10/21 대화에 값이 남음. Vercel 환경변수 수정 후 다시 배포
