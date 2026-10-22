@@ -6,7 +6,7 @@
 > **Author**: jeh-lab + Claude
 > **Date**: 2026-10-22
 > **Status**: Draft
-> **Plan**: `docs/01-plan/features/ai-call-cleanup.plan.md`
+> **Plan**: [ai-call-cleanup.plan.md](./ai-call-cleanup.plan.md)
 
 ---
 

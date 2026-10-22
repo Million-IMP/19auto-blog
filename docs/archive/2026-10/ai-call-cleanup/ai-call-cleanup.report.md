@@ -61,9 +61,9 @@
 
 ## 2. Related Documents
 
-- Plan: [ai-call-cleanup.plan.md](../01-plan/features/ai-call-cleanup.plan.md)
-- Design: [ai-call-cleanup.design.md](../02-design/features/ai-call-cleanup.design.md)
-- Analysis: [ai-call-cleanup.analysis.md](../03-analysis/ai-call-cleanup.analysis.md)
+- Plan: [ai-call-cleanup.plan.md](./ai-call-cleanup.plan.md)
+- Design: [ai-call-cleanup.design.md](./ai-call-cleanup.design.md)
+- Analysis: [ai-call-cleanup.analysis.md](./ai-call-cleanup.analysis.md)
 
 ---
 

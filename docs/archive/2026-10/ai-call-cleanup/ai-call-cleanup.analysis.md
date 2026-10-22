@@ -2,8 +2,8 @@
 
 > **Feature**: ai-call-cleanup
 > **Date**: 2026-10-22
-> **Plan**: [ai-call-cleanup.plan.md](../01-plan/features/ai-call-cleanup.plan.md)
-> **Design**: [ai-call-cleanup.design.md](../02-design/features/ai-call-cleanup.design.md) (v0.1, 설계안 C)
+> **Plan**: [ai-call-cleanup.plan.md](./ai-call-cleanup.plan.md)
+> **Design**: [ai-call-cleanup.design.md](./ai-call-cleanup.design.md) (v0.1, 설계안 C)
 > **Match Rate**: **100%** (런타임 포함 공식)
 
 ---
