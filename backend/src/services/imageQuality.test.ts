@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { aiService, type ImagePlan, type ImageScene } from './aiService';
-import { anchorEnglish, hasListedAnchor, needsRetry, retryPrompt, scoreScene, stripAiImages, stripStyleWords } from './imageQuality';
+import { anchorEnglish, hasListedAnchor, hasTypingAnchor, needsRetry, retryPrompt, scoreScene, stripAiImages, stripStyleWords, textObjectWord } from './imageQuality';
 
 function scene(overrides: Partial<ImageScene> = {}): ImageScene {
   return { point: '뜻', scene: '', must: 'smart home hub', avoid: '', prompt: 'a hub on a shelf', ...overrides };
@@ -140,5 +140,35 @@ describe('hasListedAnchor', () => {
     ['TCP/IP 설정 화면 / a, b', false],
   ])('%s → %s', (anchor, expected) => {
     expect(hasListedAnchor(scene({ anchor }))).toBe(expected);
+  });
+});
+
+// Design Ref: image-abstract-scenes §8.2·8.3 — 운영 글(#57~#81)의 실제 anchor로 감지와 오탐을 고정한다.
+describe('textObjectWord', () => {
+  it.each([
+    ['달력 넘기는 손 / a hand flipping the page of a wall calendar with no visible numbers', undefined, 'calendar'],
+    ['위험도 계기판 / a round analog gauge dial with a needle resting in its high red zone', undefined, 'gauge'],
+    ['계정 공유 / two people\'s hands reaching for one shared access card on a desk', undefined, 'access card'],
+    ['승인 서류 / a hand placing a blank approval form on a desk beside a pen', undefined, 'approval form'],
+    ['확인되지 않은 정보 / a closed cardboard box with no label sitting on a workbench', undefined, 'label'],
+    [undefined, 'a desk with a stopwatch beside a laptop', 'stopwatch'],
+    ['넘친 카운터 / a mechanical counter with drum wheels spilling past their last position', undefined, 'mechanical counter'],
+    ['해산물 / a tray of raw shrimp resting on crushed ice at a market counter', undefined, null],
+    ['줄 선 사람들 / people forms a line at a door', 'signs of wear on a wooden door', null],
+    ['봉투 / an unopened sealed envelope with no writing on a desk', undefined, null],
+    ['출입 통제 / a badge reader beside a glass door of a data center hall', undefined, null],
+  ])('%s · %s → %s', (anchor, prompt, expected) => {
+    expect(textObjectWord(scene({ anchor, ...(prompt ? { prompt } : {}) }))).toBe(expected);
+  });
+});
+
+describe('hasTypingAnchor', () => {
+  it.each([
+    ['버전 확인 / a developer\'s hands typing on a laptop keyboard at a desk', true],
+    ['경고를 넘기는 손가락 / a finger hovering over the Enter key of a laptop keyboard', true],
+    ['덮인 노트북 / a closed laptop on a desk with a blank notepad beside it', false],
+    [undefined, false],
+  ])('%s → %s', (anchor, expected) => {
+    expect(hasTypingAnchor(scene({ anchor, prompt: 'hands on a keyboard' }))).toBe(expected);
   });
 });

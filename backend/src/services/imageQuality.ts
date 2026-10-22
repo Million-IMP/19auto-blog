@@ -55,6 +55,22 @@ export function hasListedAnchor(scene: ImageScene) {
   });
 }
 
+// Design Ref: image-abstract-scenes §5.2 — 숫자·글자가 원래 있는 사물. "no numerals"를 붙여도 그려졌다(운영 #69 달력, #77 계기판).
+// counter·form·sign·tag는 일반어(market counter, forms a line, signs of wear)라 앞말과 묶어서만 본다. badge reader는 기기라 뺀다.
+const TEXT_OBJECT =
+  /\b(calendars?|clocks?|stopwatch(?:es)?|timers?|wristwatch(?:es)?|gauges?|dials?|speedometers?|thermometers?|rulers?|tape measures?|measuring tapes?|scoreboards?|(?:mechanical|tally|digital) counters?|(?:id|access|credit|business|key|name|loyalty) cards?|badges?(?!\s+readers?)|(?:name|price|luggage) tags?|(?:application|approval|consent|paper|printed|blank|tax|order|registration) forms?|certificates?|labels?|tickets?|receipts?|(?:road|street|warning|store|shop|neon|exit|traffic) signs?|signage|signboards?|posters?|banners?|(?:license|number) plates?)\b/i;
+
+// 소품으로만 나와도 숫자가 그려지므로 anchor 영어와 prompt를 함께 본다. 걸린 말을 돌려준다.
+export function textObjectWord(scene: ImageScene) {
+  const match = `${anchorEnglish(scene)} ${scene.prompt ?? ''}`.match(TEXT_OBJECT);
+  return match ? match[1].toLowerCase() : null;
+}
+
+// 질문형 소제목을 "키보드 치는 손"으로 그리면 뜻이 안 보였다(운영 #73·#77·#80). 배경 소품인 노트북·키보드는 문제없어 anchor만 본다.
+export function hasTypingAnchor(scene: ImageScene) {
+  return /\b(typing|keyboards?)\b/i.test(anchorEnglish(scene));
+}
+
 // 다시 만들 때는 대상이 분명히 보이도록 prompt에 한 번 더 못박는다.
 export function retryPrompt(scene: ImageScene) {
   const subject = anchorEnglish(scene) || scene.must;

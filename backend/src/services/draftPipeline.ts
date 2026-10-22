@@ -2,7 +2,7 @@ import type { Post } from '@prisma/client';
 import { prisma } from '../db';
 import { aiService, extractUrlText, remainingTime, withDeadline, type DraftContext, type ImagePlan, type ImageScene, type Outline } from './aiService';
 import { imageProvider, randomSeed } from './imageProvider';
-import { hasListedAnchor, maxRebuilds, needsRetry, retryPrompt, retrySpeed, scoreScene, stripAiImages, stripStyleWords } from './imageQuality';
+import { hasListedAnchor, hasTypingAnchor, maxRebuilds, needsRetry, retryPrompt, retrySpeed, scoreScene, stripAiImages, stripStyleWords, textObjectWord } from './imageQuality';
 import { relinkUrls, type RelinkPair } from './imageRelink';
 
 // 상태 코드가 있는 오류. 라우트가 그대로 응답 코드로 쓴다.
@@ -102,8 +102,8 @@ async function planImageSet(post: Post): Promise<ImagePlan> {
     .map((s) => ({ ...s, h2: (s.h2 || '').trim() }))
     .filter((s, i, all) => heads.includes(s.h2) && all.findIndex((o) => o.h2 === s.h2) === i && hasPrompt(s));
 
-  // 앞 장면과 겹치거나 anchor에 개념을 나열한 소제목 장면만 한 번 다시 계획한다. 결과가 또 나열이어도 그대로 쓴다.
-  // Design Ref: v2 §6 — 표지는 글 전체를 대표하므로 나열 감지를 하지 않는다.
+  // 앞 장면과 겹치거나 anchor에 문제가 있는 소제목 장면만 한 번 다시 계획한다. 결과가 또 걸려도 그대로 쓴다.
+  // Design Ref: v2 §6 — 표지는 글 전체를 대표하므로 감지하지 않는다(키보드 글의 표지는 키보드다).
   for (let i = 0; i < plan.sections.length; i += 1) {
     const scene = plan.sections[i];
     const earlier = [plan.cover, ...plan.sections.slice(0, i)].map((s) => s.prompt);
@@ -111,6 +111,14 @@ async function planImageSet(post: Post): Promise<ImagePlan> {
     if (earlier.some((p) => similarity(p, scene.prompt) > 0.6)) reasons.push('앞 장면과 구도·소재가 겹쳤습니다.');
     if (hasListedAnchor(scene)) {
       reasons.push(`이전 anchor "${(scene.anchor || '').split(' / ')[0].trim()}"에 개념이 여러 개였습니다. 본문에서 가장 먼저 설명하는 하나만 고르세요.`);
+    }
+    // Design Ref: image-abstract-scenes §5.3 — 숫자가 그려지는 사물, 뜻이 안 보이는 키보드 장면도 같은 흐름으로 한 번 다시 계획한다.
+    const textObject = textObjectWord(scene);
+    if (textObject) {
+      reasons.push(`"${textObject}"처럼 숫자·글자가 원래 있는 사물은 없애라고 써도 숫자가 그려집니다. 그 사물 없이 같은 뜻을 보여주는 다른 대상을 고르세요.`);
+    }
+    if (hasTypingAnchor(scene)) {
+      reasons.push('키보드 치는 손은 소제목 뜻을 보여주지 못합니다. 소제목 아래 첫 문단의 답이 가리키는 구체 대상을 anchor로 고르세요.');
     }
     // 다시 계획은 더 나은 장면을 위한 것이라, 시간이 모자라거나 실패하면 원래 장면을 쓴다. 실패로 계획 전체를 버리지 않는다.
     if (reasons.length === 0 || remainingTime() < REPLAN_MIN_MS) continue;
