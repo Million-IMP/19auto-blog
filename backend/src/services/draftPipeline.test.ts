@@ -340,6 +340,48 @@ describe('planImageSet 다시 계획', () => {
     expect(replan.mock.calls[0][0].reason).toContain('개념이 여러 개');
   });
 
+  // Design Ref: image-abstract-scenes §8.4
+  it('글자 사물 anchor는 걸린 말을 사유에 담아 한 번 다시 계획한다', async () => {
+    seedPost();
+    planWith([{ h2: '물은 언제 주나요?', anchor: '물 주는 날 / a wall calendar with no visible numbers', prompt: 'a hand flipping a wall calendar' }]);
+    const replan = vi.spyOn(aiService, 'replanScene').mockResolvedValue(replanned);
+    await advancePost(1, Infinity);
+
+    expect(replan).toHaveBeenCalledTimes(1);
+    expect(replan.mock.calls[0][0].reason).toContain('"calendar"');
+    expect(readyPlan().sections[0].anchor).toBe('공유기 / a home router');
+  });
+
+  it('키보드 치는 손 anchor는 첫 문단의 대상을 고르라는 사유로 다시 계획한다', async () => {
+    seedPost();
+    planWith([{ h2: '물은 언제 주나요?', anchor: '확인하기 / hands typing on a laptop keyboard', prompt: 'hands typing at a desk' }]);
+    const replan = vi.spyOn(aiService, 'replanScene').mockResolvedValue(replanned);
+    await advancePost(1, Infinity);
+
+    expect(replan).toHaveBeenCalledTimes(1);
+    expect(replan.mock.calls[0][0].reason).toContain('키보드');
+  });
+
+  it('표지 anchor가 키보드나 글자 사물이어도 다시 계획하지 않는다', async () => {
+    seedPost();
+    planWith([{ h2: '물은 언제 주나요?', anchor: '물뿌리개 / a watering can', prompt: 'watering can pouring water' }], '코딩 폰트 / a mechanical keyboard with a wall calendar');
+    const replan = vi.spyOn(aiService, 'replanScene').mockResolvedValue(replanned);
+    await advancePost(1, Infinity);
+
+    expect(replan).not.toHaveBeenCalled();
+  });
+
+  it('나열이면서 글자 사물이면 한 번만 다시 계획하고 사유를 둘 다 전한다', async () => {
+    seedPost();
+    planWith([{ h2: '물은 언제 주나요?', anchor: '물뿌리개·달력 / a watering can and a calendar', prompt: 'a watering can beside a calendar' }]);
+    const replan = vi.spyOn(aiService, 'replanScene').mockResolvedValue(replanned);
+    await advancePost(1, Infinity);
+
+    expect(replan).toHaveBeenCalledTimes(1);
+    expect(replan.mock.calls[0][0].reason).toContain('개념이 여러 개');
+    expect(replan.mock.calls[0][0].reason).toContain('"calendar"');
+  });
+
   it('다시 계획이 실패하거나 prompt가 비면 원래 장면을 쓰고 READY까지 간다', async () => {
     seedPost();
     planWith([

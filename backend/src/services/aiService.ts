@@ -111,6 +111,9 @@ ${numbered(input.ruleTemplates, '제한 없음')}`;
 // v2: 개념을 나열한 anchor(블루투스·LAN·인터넷)와 화면 속 내용 anchor(흐려서 안 보임)가 3점의 원인이었다.
 const SCENE_RULES = `- 먼저 anchor를 정합니다: 그 소제목의 핵심 개념 하나를 대표하는, 눈에 보이는 사물이나 사람의 행동(제품·기기·장소·손으로 하는 동작)입니다. 소제목에 개념이 여러 개면 본문에서 가장 먼저 설명하는 하나만 고르고, 나머지는 caption에 남깁니다. 형식은 "한국어 원문 표현 / English visual description"이고, 한국어 부분에 '·'나 쉼표로 여러 개를 나열하지 않습니다. 제품은 상표 대신 생김새로 묘사합니다.
 - 화면 속 내용(설정 항목·검사 결과·로그·문서 글)은 anchor가 될 수 없습니다. 화면은 흐리게 그리므로 알아볼 수 없기 때문입니다. 그 기능을 쓰는 손·기기·주변 사물로 보여주고, 화면은 배경에 둡니다.
+- 질문형·추상 소제목(확인 방법·영향·위험·정도·차이·아직 모르는 것)은 소제목 단어가 아니라 그 소제목 아래 첫 문단의 답이 가리키는 구체 대상이나 결과로 anchor를 고릅니다. 예: "버전이 영향을 받나요?"의 답이 "공유 호스팅 서버가 영향을 받습니다"면 서버 랙이 anchor입니다. "확인한다·입력한다·읽는다"를 키보드 치는 손이나 화면을 보는 사람으로 그리지 않습니다.
+- 숫자·글자가 원래 있는 사물(달력·시계·스톱워치·타이머·계기판·온도계·자·저울, 카드·명찰·양식·증서·라벨·태그·티켓·영수증·간판·포스터·번호판)은 anchor로도 소품으로도 쓰지 않습니다. "숫자 없는 달력"처럼 없애는 말을 붙여도 숫자가 그려집니다(운영 #69·#77). 시간·정도·신원 같은 뜻은 다른 사물이나 행동으로 보여줍니다.
+- 상태 하나(닫힘·비어 있음·똑같은 두 개)에 뜻을 맡기지 않습니다. 이미지 모델은 상태를 자주 놓칩니다(닫힌 상자가 열려서, 똑같은 폴더가 다르게 그려졌다). prompt와 must에는 보여야 할 것만 쓰고 no text·no numbers·no label 같은 말은 쓰지 않습니다. 빼야 할 것은 avoid에 씁니다.
 - prompt는 영어 한 단락으로, 다음 순서로 씁니다: anchor와 그 행동·상태 → 장소·맥락 → shot type·angle·lens → 조명 → 분위기. 화풍·색·재질은 style에서 정하므로 prompt에 쓰지 않습니다.
   예: "a person seen from behind adjusting settings on a laptop at a home desk, the screen showing a blurred unreadable dashboard, a small smart home hub on the shelf beside it, medium shot, eye level, 35mm lens, soft window light from the left, calm focused mood, negative space on the right"
 - 사람은 뒷모습·옆모습·기기를 다루는 손까지 그릴 수 있습니다. 얼굴 클로즈업과 군중 장면은 피합니다(왜곡이 잦음).
