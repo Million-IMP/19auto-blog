@@ -71,6 +71,27 @@ export function hasTypingAnchor(scene: ImageScene) {
   return /\b(typing|keyboards?)\b/i.test(anchorEnglish(scene));
 }
 
+// Design Ref: image-scene-followup §5.3 — 빈 종이류 anchor. 운영 소제목 장면의 32%였고 눈 점검 16장 중 11장이 약했다.
+// page는 화면(web page)일 때가 많아 종이로 보이는 표현만 센다. 한국어 anchor가 문서를 가리키면 종이가 주제라 세지 않는다(규칙 문서, HOA 서류는 분명했다).
+const PAPER =
+  /\b(notebooks?|notepads?|sticky[- ]notes?|sticky-note pads?|papers?|sheets?|clipboards?|checklists?|folders?|binders?|documents?|(?:blank|printed|ruled|empty|paper|notebook) pages?|pages? of|envelopes?|ledgers?|reports?|scrolls?|index cards?|printouts?)\b/i;
+const DOCUMENT = /문서|서류|계약|규칙|가이드라인|보고서|공지|편지|신청서|원문|약관|논문/;
+// "USB 키 … beside a closed notebook"처럼 옆에 둔 소품은 장면의 대상이 아니라 그 앞까지만 본다.
+const BESIDE = /\s(?:beside|next to|near|behind)\s/i;
+
+export function paperWord(scene: ImageScene) {
+  if (DOCUMENT.test((scene.anchor ?? '').split(' / ')[0])) return null;
+  const match = anchorEnglish(scene).split(BESIDE)[0].match(PAPER);
+  return match ? match[1].toLowerCase() : null;
+}
+
+// 할 일 소제목("지금 무엇을 하면 되나요", "무엇부터 점검하나요", "어떻게 확인하나요"). 설명("어떻게 동작하나요")·사실("무엇이 확인됐나요")은 아니다.
+const ACTION = /(하면|해야|해 두면|봐야)\s*(되나요|하나요|할까요|좋을까요|좋나요)|무엇부터|어떻게\s*(\S+\s+)?(설치|적용|대비|준비|대응|확인|점검)|준비해야|대비하/;
+
+export function isActionHeading(h2: string) {
+  return ACTION.test(h2);
+}
+
 // 다시 만들 때는 대상이 분명히 보이도록 prompt에 한 번 더 못박는다.
 export function retryPrompt(scene: ImageScene) {
   const subject = anchorEnglish(scene) || scene.must;
