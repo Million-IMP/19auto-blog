@@ -382,6 +382,53 @@ describe('planImageSet 다시 계획', () => {
     expect(replan.mock.calls[0][0].reason).toContain('"calendar"');
   });
 
+  // Design Ref: image-scene-followup §8.4
+  it('할 일 소제목의 빈 종이 anchor는 실제 대상을 고르라는 사유로 다시 계획한다', async () => {
+    seedPost({ stage: 'IMAGES', content: '도입 문단입니다.\n\n## 지금 무엇을 하면 되나요?\n화분에 물을 줍니다.' });
+    planWith([{ h2: '지금 무엇을 하면 되나요?', anchor: '준비 / an open notebook with blank ruled lines on a desk', prompt: 'a blank notebook on a desk' }]);
+    const replan = vi.spyOn(aiService, 'replanScene').mockResolvedValue(replanned);
+    await advancePost(1, Infinity);
+
+    expect(replan).toHaveBeenCalledTimes(1);
+    expect(replan.mock.calls[0][0].reason).toContain('할 일 소제목');
+    expect(replan.mock.calls[0][0].reason).toContain('"notebook"');
+  });
+
+  it('설명 소제목의 종이 장면은 첫째는 두고 둘째만 다시 계획한다', async () => {
+    seedPost();
+    planWith([
+      { h2: '물은 언제 주나요?', anchor: '기록 / a blank index card on a desk', prompt: 'a blank index card on a desk' },
+      { h2: '겨울에는 어떻게 하나요?', anchor: '정리 / a stack of blank folders on a table', prompt: 'a stack of folders on a table' },
+    ]);
+    const replan = vi.spyOn(aiService, 'replanScene').mockResolvedValue(replanned);
+    await advancePost(1, Infinity);
+
+    expect(replan).toHaveBeenCalledTimes(1);
+    expect(replan.mock.calls[0][0].h2).toBe('겨울에는 어떻게 하나요?');
+    expect(replan.mock.calls[0][0].reason).toContain('이미 종이 장면');
+  });
+
+  it('한국어 anchor가 문서를 가리키면 종이로 세지 않는다', async () => {
+    seedPost();
+    planWith([
+      { h2: '물은 언제 주나요?', anchor: '관리 규칙 문서 / a hand turning the pages of a printed rulebook', prompt: 'a hand turning pages of a rulebook' },
+      { h2: '겨울에는 어떻게 하나요?', anchor: '정리 / a stack of blank folders on a table', prompt: 'a stack of folders on a table' },
+    ]);
+    const replan = vi.spyOn(aiService, 'replanScene').mockResolvedValue(replanned);
+    await advancePost(1, Infinity);
+
+    expect(replan).not.toHaveBeenCalled();
+  });
+
+  it('표지의 종이는 세지 않아 소제목의 첫 종이 장면은 그대로 둔다', async () => {
+    seedPost();
+    planWith([{ h2: '물은 언제 주나요?', anchor: '기록 / a blank index card on a desk', prompt: 'a blank index card on a desk' }], '노트 / an open notebook on a desk');
+    const replan = vi.spyOn(aiService, 'replanScene').mockResolvedValue(replanned);
+    await advancePost(1, Infinity);
+
+    expect(replan).not.toHaveBeenCalled();
+  });
+
   it('다시 계획이 실패하거나 prompt가 비면 원래 장면을 쓰고 READY까지 간다', async () => {
     seedPost();
     planWith([

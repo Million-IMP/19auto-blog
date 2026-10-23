@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { aiService, type ImagePlan, type ImageScene } from './aiService';
-import { anchorEnglish, hasListedAnchor, hasTypingAnchor, needsRetry, retryPrompt, scoreScene, stripAiImages, stripStyleWords, textObjectWord } from './imageQuality';
+import { anchorEnglish, hasListedAnchor, hasTypingAnchor, isActionHeading, needsRetry, paperWord, retryPrompt, scoreScene, stripAiImages, stripStyleWords, textObjectWord } from './imageQuality';
 
 function scene(overrides: Partial<ImageScene> = {}): ImageScene {
   return { point: '뜻', scene: '', must: 'smart home hub', avoid: '', prompt: 'a hub on a shelf', ...overrides };
@@ -170,5 +170,42 @@ describe('hasTypingAnchor', () => {
     [undefined, false],
   ])('%s → %s', (anchor, expected) => {
     expect(hasTypingAnchor(scene({ anchor, prompt: 'hands on a keyboard' }))).toBe(expected);
+  });
+});
+
+// Design Ref: image-scene-followup §8.2·8.3 — 운영 글(#57~#82)의 실제 anchor·소제목.
+describe('paperWord', () => {
+  it.each([
+    ['준비 / an open notebook with blank ruled lines lying on a wooden desk', 'notebook'],
+    ['확인 목록 / a hand with a pen touching one of several empty square boxes on a blank sheet', 'sheet'],
+    ['서버 점검 / a hand holding a clipboard with blank lines beside a server rack', 'clipboard'],
+    ['내부 감사 / an auditor\'s hand slowly turning the pages of a thick blank-paged binder', 'pages of'],
+    ['규칙 문서 / a hand turning the pages of a printed rulebook', null],
+    ['매매 계약 전 서류 확인 / a pair of hands turning the blank pages of a folder', null],
+    ['일반 사용자 / a hand holding a smartphone with a blurred, unreadable web page on the screen', null],
+    ['보안 키 / a small USB security key plugged into a laptop beside a closed notebook', null],
+    ['서버 / a rack-mounted server in a data center aisle', null],
+    [undefined, null],
+  ])('%s → %s', (anchor, expected) => {
+    expect(paperWord(scene({ anchor }))).toBe(expected);
+  });
+});
+
+describe('isActionHeading', () => {
+  it.each([
+    ['지금 무엇을 하면 되나요?', true],
+    ['개발자는 지금 무엇을 준비하면 되나요?', true],
+    ['배포 전에 무엇을 확인하면 되나요?', true],
+    ['지금 기업이나 개발자는 무엇을 확인해 두면 좋을까요?', true],
+    ['DuckDB 2.0을 써보기 전에 무엇부터 확인하면 좋을까요?', true],
+    ['업무용 로그인 정보는 어떻게 관리하면 되나요?', true],
+    ['이미 공격을 당했는지는 어떻게 확인하나요?', true],
+    ['어떤 환경에서 영향을 받는지 확인하려면 무엇을 봐야 하나요?', true],
+    ['부분 파서는 어떻게 동작하나요?', false],
+    ['이번 사건에서 실제로 무엇이 확인됐나요?', false],
+    ['분석 기법의 신뢰도 점수는 어떻게 읽나요?', false],
+    ['1.5도를 넘으면 일상에서 무엇이 달라지나요?', false],
+  ])('%s → %s', (h2, expected) => {
+    expect(isActionHeading(h2)).toBe(expected);
   });
 });
