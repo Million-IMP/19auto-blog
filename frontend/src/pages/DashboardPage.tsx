@@ -373,6 +373,12 @@ export function DashboardPage() {
         </Card>
         <FeedbackBoard />
       </div>
+
+      {/* 정적 문서(frontend/public)라 라우터 Link가 아닌 a로 연다 */}
+      <footer className="mt-section flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-ink-3">
+        <a href="/privacy.html" className="hover:text-ink">개인정보처리방침</a>
+        <a href="/terms.html" className="hover:text-ink">서비스 이용약관</a>
+      </footer>
     </Page>
   );
 }
