@@ -7,7 +7,7 @@
 > **Author**: jeh-lab (with Claude)
 > **Date**: 2026-10-18
 > **Status**: Draft
-> **Planning Doc**: [ai-token-warning.plan.md](../../01-plan/features/ai-token-warning.plan.md)
+> **Planning Doc**: [ai-token-warning.plan.md](./ai-token-warning.plan.md)
 
 ---
 

@@ -1,6 +1,6 @@
 # ai-token-warning 완료 보고서
 
-> **상태**: 완료 (SC-5는 배포 후 1주 관찰)
+> **상태**: 완료 — SC-5 운영 1주 관찰 끝(10/19~10/26): 경고 1건·잘림 0건, 제한 조정 없음
 >
 > **프로젝트**: 19auto-blog
 > **작성**: jeh-lab (with Claude)
@@ -27,7 +27,7 @@
 │  설계 일치율: 98% → 100% (Act 1회)            │
 ├─────────────────────────────────────────────┤
 │  ✅ 기능 요구사항: 6 / 6                      │
-│  ✅ 성공 기준: 4 / 5 충족, 1 배포 후 관찰       │
+│  ✅ 성공 기준: 5 / 5 충족 (SC-5 운영 1주 관찰)  │
 │  ➕ 계획 밖: OSMU 빈 초안 저장 방지             │
 └─────────────────────────────────────────────┘
 ```
@@ -51,9 +51,9 @@
 | SC-2 | 80% 이상만 기록, 같은 호출 24시간 1번 | ✅ | aiUsageLog 테스트 8건 (24시간 창·잘림 예외 포함) |
 | SC-3 | 3곳 잘림 시 오류, 잘린 OSMU 저장 안 됨 | ✅ | aiService 테스트, 호출부 확인(크론은 항목·채널별 실패 처리) |
 | SC-4 | 검증 4단계 | ✅ | tsc · 90/90 · 린트 19 · 빌드 |
-| SC-5 | 배포 후 1주 경고 확인 → 제한 조정 결정 | ⏳ | 배포 후 |
+| SC-5 | 배포 후 1주 경고 확인 → 제한 조정 결정 | ✅ | 10/19~10/26 활동 기록 "오류": `AI_TOKEN_NEAR_LIMIT` 1건(scoreImage 900/1024, 87%, 10/19), 실제 잘림 0건 → 제한 그대로 |
 
-**성공률**: 4/5 충족, 1 대기
+**성공률**: 5/5 충족
 
 ## 1.5 결정 기록
 
@@ -71,9 +71,9 @@
 
 | 단계 | 문서 | 상태 |
 |------|------|------|
-| Plan | [ai-token-warning.plan.md](../01-plan/features/ai-token-warning.plan.md) | ✅ |
-| Design | [ai-token-warning.design.md](../02-design/features/ai-token-warning.design.md) | ✅ |
-| Check | [ai-token-warning.analysis.md](../03-analysis/ai-token-warning.analysis.md) | ✅ |
+| Plan | [ai-token-warning.plan.md](./ai-token-warning.plan.md) | ✅ |
+| Design | [ai-token-warning.design.md](./ai-token-warning.design.md) | ✅ |
+| Check | [ai-token-warning.analysis.md](./ai-token-warning.analysis.md) | ✅ |
 
 ---
 
@@ -107,8 +107,8 @@
 
 | 항목 | 방법 |
 |------|------|
-| SC-5 1주 관찰 | 배포 후 활동 기록 "오류" 탭에서 `AI 길이 경고` 확인 → 자주 뜨는 호출만 제한 상향 |
-| 직접 호출 3곳 반복 코드 | askText에 system 옵션을 두고 합치기 (정리 작업) |
+| ~~SC-5 1주 관찰~~ | 완료 10/26 — 경고 1건(scoreImage 87%), 잘림 0. 같은 기간 글 40개 완성(+이미지 단계에서 멈춘 12개는 Ideogram 키 401, 길이 제한과 무관) |
+| ~~직접 호출 3곳 반복 코드~~ | 완료 — ai-call-cleanup (PR #31) |
 | 동시 호출 시 같은 날 2건 기록 | 수용 |
 
 ---
@@ -141,9 +141,9 @@
 
 ## 7. 다음 단계
 
-1. [ ] PR 머지 (사용자 요청 시)
-2. [ ] 배포 후 1주 활동 기록 확인 → 제한 조정
-3. [ ] `/bkit:pdca archive ai-token-warning`
+1. [x] PR 머지 (#23)
+2. [x] 배포 후 1주 활동 기록 확인 → 제한 조정 없음 (10/26)
+3. [x] 보관 (docs/archive/2026-10/ai-token-warning/)
 
 ---
 

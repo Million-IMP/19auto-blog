@@ -1,19 +1,18 @@
-# 다음 보완 작업 — bkit 프롬프트 모음 (2026-10-19 기준)
+# 다음 보완 작업 — bkit 프롬프트 모음 (2026-10-26 기준)
 
 `/clear` 뒤 새 대화에서 이 파일 하나로 이어서 진행한다. 진행 방식은 지금까지와 같다:
 bkit 자동화 L1(단계마다 확인) → 각 단계 끝나면 **"다음 진행"** 입력 → 머지는 내가 말할 때만.
 
 ## 지금 상태
-- master `5b25e3a` (PR #32까지 머지·배포). 운영: https://19auto-blog.vercel.app — #32 머지 push가 Vercel에 전달되지 않아(대기·차단 기록 없음) 10/23 Vercel API로 master를 직접 운영 배포함. 다음 머지 뒤에도 배포가 붙는지 확인
-- image-abstract-scenes: PR #32 머지·배포(10/22~23). 로컬 3세트(19장, 약 $1.14)로 성공 기준 5/5. 보고서 `docs/archive/2026-10/image-abstract-scenes/image-abstract-scenes.report.md`
-- image-scene-followup: PR #33 머지 대기(10/22, #32 머지 뒤 base master). 바뀐 소제목 14장(약 $0.84)으로 눈 점검 분명 2→9. 보고서 `docs/archive/2026-10/image-scene-followup/image-scene-followup.report.md`
+- **🚨 10/24 16:33 UTC부터 운영 이미지 생성 실패** — Ideogram 401(키 거부). 운영·로컬 키 모두 401(10/22엔 정상), Vercel 환경변수는 11일 전 그대로 → Ideogram 쪽에서 키가 무효화됨. #97~#108 12개 글이 IMAGES 단계에서 멈춤(본문은 완성). 새 키 발급 → Vercel·로컬 `.env` 교체 → 다시 배포 → 멈춘 글 이어하기(이미지 비용 발생, 사용자 결정). 비밀값은 사용자가 직접 입력
+- master `e4781a7` (PR #33까지 머지·배포). 운영: https://19auto-blog.vercel.app — #32 머지는 push가 Vercel에 전달되지 않아 10/23 Vercel API로 직접 운영 배포, #33은 자동 배포 정상
+- image-abstract-scenes(PR #32)·image-scene-followup(PR #33) 운영 적용 확인(10/26): 5+6번 적용 글 #89~#96 8개 vs 이전 #57~#84 28개 — 글자 사물·키보드 anchor 25→0, 빈 종이 글당 1.36→0.13, 할 일 소제목 종이 11→0, 3점 이하 11.2%→4.7%, 서버 랙 표지 8/28→0/8, 상자 7.9%→4.7%. 눈 점검 4장 글자 0. 새로 보이는 일반 장면: 흐린 화면의 휴대폰·태블릿
 - local-test-db: PR #27 머지·배포(10/20), archive 완료 → 로컬 검증은 **`npm run start:local`** (운영 DB 안 건드림, 운영 사본 5초 시드)
 - prod-ui-check: PR #29 머지·배포(10/21), 운영 #37 이미지 6개 복구, 화면 3가지 확인 완료, archive 완료. 보고서 `docs/archive/2026-10/prod-ui-check/prod-ui-check.report.md`
 - (권장) `APP_PASSWORD` 교체 — 10/21 대화에 값이 남음. Vercel 환경변수 수정 후 다시 배포
 - 커밋 안 된 것: `docs/gpters-presentation/script.md` (미추적, 내용 확인 전이라 커밋 안 함)
-- 끝난 PDCA: palette-mobile, image-relevance(v1·v2), mobile-overflow, local-test-db, prod-ui-check, ai-call-cleanup, image-abstract-scenes, image-scene-followup → `docs/archive/2026-10/`
-- 관찰 중: ai-token-warning (문서는 `docs/01-plan~04-report/ai-token-warning.*`) — 10/25쯤 활동 기록 "AI 길이 경고" 확인 후 제한 조정 → archive. 10/21 기준 경고 1건: scoreImage 900/1024 (87%, 10/20 00:35)
-- 관찰 중: image-abstract-scenes·image-scene-followup 운영 적용 — 머지·배포 뒤 10/24쯤 새 글 3~5개 장면에서 글자 사물·키보드 anchor 수, 글당 빈 종이 anchor 수, 할 일 소제목 장면, 상자 anchor 비율, 3점 이하 수 확인 (비용 0, 운영 공개 API `/api/posts`)
+- 끝난 PDCA: palette-mobile, image-relevance(v1·v2), mobile-overflow, local-test-db, prod-ui-check, ai-call-cleanup, image-abstract-scenes, image-scene-followup, ai-token-warning → `docs/archive/2026-10/`
+- ai-token-warning 관찰 끝(10/26): 10/19~10/26 경고 1건(scoreImage 87%)·잘림 0 → 제한 조정 없음, 보관
 - 결정 기록: gbrain `decisions/19auto-blog-image-relevance`, `decisions/19auto-blog-ai-token-warning`, `decisions/19auto-blog-mobile-overflow`, `decisions/19auto-blog-local-test-db`, `decisions/19auto-blog-prod-ui-check`, `decisions/19auto-blog-ai-call-cleanup`, `decisions/19auto-blog-image-abstract-scenes`, `decisions/19auto-blog-image-scene-followup`
 - mobile-overflow: PR #25 머지·배포(10/19), archive 완료
 
@@ -27,6 +26,7 @@ bkit 자동화 L1(단계마다 확인) → 각 단계 끝나면 **"다음 진행
 | ~~4~~ | ~~`ai-call-cleanup`~~ | **완료 10/22** — 3곳을 askText(`{ system }` 옵션)로 통합, 직접 호출 5곳 → 2곳(askText·scoreImage). 빈 응답 오류만 통일. 보고서 `docs/archive/2026-10/ai-call-cleanup/ai-call-cleanup.report.md` | — |
 | ~~5~~ | ~~`image-abstract-scenes`~~ | **완료 10/22** — 운영 162장 분석: 3점 17장 중 11장이 글자 사물(달력·계기판)·키보드 장면. 규칙 3줄 + 감지 → 한 번 다시 계획. 로컬 3세트: 숫자 결함 2→0, 3점 이하 6→3, 감지 anchor 18→0. 보고서 `docs/archive/2026-10/image-abstract-scenes/image-abstract-scenes.report.md` | — |
 | ~~6~~ | ~~`image-scene-followup`~~ | **완료 10/22** — 소제목 장면의 32%가 빈 종이(눈 점검 16장 중 11장 약함). 할 일 소제목은 실제 대상에 하는 행동, 빈 종이는 글당 1장. 바뀐 소제목 14장: 분명 2→9, 계획 종이 글당 2.2→0.1. 보고서 `docs/archive/2026-10/image-scene-followup/image-scene-followup.report.md` | — |
+| 0 | `ideogram-key` (긴급, 코드 아님) | Ideogram 키 401로 10/24부터 운영 이미지 생성 중단, 12개 글 멈춤. 사용자: 새 키 발급·Vercel/로컬 교체·다시 배포 → Claude: 배포 확인·멈춘 글 이어하기(예산 확인 후). 키가 다시 조용히 무효화되면 알 수 있게 크론 실패 알림을 둘지 검토 | 작음 |
 | 7 | `image-device-text` | 6번에서 남은 것: Ideogram이 기기·상자 표면에 엉터리 상표 글자를 넣음(채점도 4점), 종이 대신 배송 상자 반복. 채점 기준·제외어를 바꾸면 채점만의 효과를 먼저 잴 것. 이미지 예산 필요 | 중 |
 
 ## 붙여 넣을 프롬프트
