@@ -7,7 +7,7 @@
 > **Author**: jeh-lab (with Claude)
 > **Date**: 2026-10-18
 > **Status**: Draft
-> **배경 사이클**: [image-relevance-v2 보고서](../../archive/2026-10/image-relevance-v2/image-relevance-v2.report.md) — 생각(thinking) 토큰 때문에 이미지 계획이 4번 중 1번 잘림
+> **배경 사이클**: [image-relevance-v2 보고서](../image-relevance-v2/image-relevance-v2.report.md) — 생각(thinking) 토큰 때문에 이미지 계획이 4번 중 1번 잘림
 
 ---
 
