@@ -5,7 +5,8 @@ bkit 자동화 L1(단계마다 확인) → 각 단계 끝나면 **"다음 진행
 
 ## 지금 상태
 - **🚨 10/24 16:33 UTC부터 운영 이미지 생성 실패** — Ideogram 401(키 거부). 운영·로컬 키 모두 401(10/22엔 정상), Vercel 환경변수는 11일 전 그대로 → Ideogram 쪽에서 키가 무효화됨. #97~#108 12개 글이 IMAGES 단계에서 멈춤(본문은 완성). 새 키 발급 → Vercel·로컬 `.env` 교체 → 다시 배포 → 멈춘 글 이어하기(이미지 비용 발생, 사용자 결정). 비밀값은 사용자가 직접 입력
-- master `e4781a7` (PR #33까지 머지·배포). 운영: https://19auto-blog.vercel.app — #32 머지는 push가 Vercel에 전달되지 않아 10/23 Vercel API로 직접 운영 배포, #33은 자동 배포 정상
+- master `aed2dc2` (PR #35까지 머지·배포). 운영: https://19auto-blog.vercel.app — #32 머지는 push가 Vercel에 전달되지 않아 10/23 Vercel API로 직접 운영 배포, #33·#35는 자동 배포 정상
+- 개인정보처리방침·이용약관(10/26): PR #35 머지·배포 — 정적 문서 `frontend/public/privacy.html`·`terms.html` → 운영 `/privacy.html`·`/terms.html` 200, 대시보드 하단 링크. 구글 OAuth 동의 화면 등록 완료(사용자). 남은 것: 해외 위탁 표의 Neon 리전("미국 등"으로 적음) 확인, Google 연동 기능을 만들면 방침 11조를 실제 스코프로 갱신. 공개 문의 이메일은 jinkoo1.lee@gmail.com
 - image-abstract-scenes(PR #32)·image-scene-followup(PR #33) 운영 적용 확인(10/26): 5+6번 적용 글 #89~#96 8개 vs 이전 #57~#84 28개 — 글자 사물·키보드 anchor 25→0, 빈 종이 글당 1.36→0.13, 할 일 소제목 종이 11→0, 3점 이하 11.2%→4.7%, 서버 랙 표지 8/28→0/8, 상자 7.9%→4.7%. 눈 점검 4장 글자 0. 새로 보이는 일반 장면: 흐린 화면의 휴대폰·태블릿
 - local-test-db: PR #27 머지·배포(10/20), archive 완료 → 로컬 검증은 **`npm run start:local`** (운영 DB 안 건드림, 운영 사본 5초 시드)
 - prod-ui-check: PR #29 머지·배포(10/21), 운영 #37 이미지 6개 복구, 화면 3가지 확인 완료, archive 완료. 보고서 `docs/archive/2026-10/prod-ui-check/prod-ui-check.report.md`
@@ -13,7 +14,7 @@ bkit 자동화 L1(단계마다 확인) → 각 단계 끝나면 **"다음 진행
 - 커밋 안 된 것: `docs/gpters-presentation/script.md` (미추적, 내용 확인 전이라 커밋 안 함)
 - 끝난 PDCA: palette-mobile, image-relevance(v1·v2), mobile-overflow, local-test-db, prod-ui-check, ai-call-cleanup, image-abstract-scenes, image-scene-followup, ai-token-warning → `docs/archive/2026-10/`
 - ai-token-warning 관찰 끝(10/26): 10/19~10/26 경고 1건(scoreImage 87%)·잘림 0 → 제한 조정 없음, 보관
-- 결정 기록: gbrain `decisions/19auto-blog-image-relevance`, `decisions/19auto-blog-ai-token-warning`, `decisions/19auto-blog-mobile-overflow`, `decisions/19auto-blog-local-test-db`, `decisions/19auto-blog-prod-ui-check`, `decisions/19auto-blog-ai-call-cleanup`, `decisions/19auto-blog-image-abstract-scenes`, `decisions/19auto-blog-image-scene-followup`
+- 결정 기록: gbrain `decisions/19auto-blog-image-relevance`, `decisions/19auto-blog-ai-token-warning`, `decisions/19auto-blog-mobile-overflow`, `decisions/19auto-blog-local-test-db`, `decisions/19auto-blog-prod-ui-check`, `decisions/19auto-blog-ai-call-cleanup`, `decisions/19auto-blog-image-abstract-scenes`, `decisions/19auto-blog-image-scene-followup`, `decisions/19auto-blog-privacy-terms-pages`
 - mobile-overflow: PR #25 머지·배포(10/19), archive 완료
 
 ## 보완 후보 (추천 순서)
