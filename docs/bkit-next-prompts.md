@@ -4,7 +4,8 @@
 bkit 자동화 L1(단계마다 확인) → 각 단계 끝나면 **"다음 진행"** 입력 → 머지는 내가 말할 때만.
 
 ## 지금 상태
-- **🚨 10/24 16:33 UTC부터 운영 이미지 생성 실패** — Ideogram 401(키 거부). 운영·로컬 키 모두 401(10/22엔 정상), Vercel 환경변수는 11일 전 그대로 → Ideogram 쪽에서 키가 무효화됨. #97~#108 12개 글이 IMAGES 단계에서 멈춤(본문은 완성). 새 키 발급 → Vercel·로컬 `.env` 교체 → 다시 배포 → 멈춘 글 이어하기(이미지 비용 발생, 사용자 결정). 비밀값은 사용자가 직접 입력
+- **✅ image-jobs 완료·PR 대기 (브랜치 `feat/image-jobs`, 10/30)** — Ideogram 취소(10/26). 서버는 그림을 만들지 않고(`IMAGE_PROVIDER=jobs`) PC에서 구독 `agy`로 채워 올린다. 로컬 SC 5/5, Match 99%, 테스트 182. 보고서 `docs/04-report/image-jobs.report.md`. **머지 전에** Vercel Production `IMAGE_PROVIDER=jobs`로 변경·`IDEOGRAM_API_KEY`·`IDEOGRAM_RENDERING_SPEED` 삭제(사용자). 머지 뒤 운영 `npm run image-jobs -- run`으로 업로드 1장 확인, 멈춘 글(10/29 기준 #97~#125, 29개)은 글마다 "이어하기". 머지 뒤 PDCA 문서 보관
+- (이전 기록) 10/24 16:33 UTC부터 운영 이미지 생성 실패 — Ideogram 401(키 거부). 운영·로컬 키 모두 401(10/22엔 정상), Vercel 환경변수는 11일 전 그대로 → Ideogram 쪽에서 키가 무효화됨. #97~#108 12개 글이 IMAGES 단계에서 멈춤(본문은 완성). 새 키 발급 → Vercel·로컬 `.env` 교체 → 다시 배포 → 멈춘 글 이어하기(이미지 비용 발생, 사용자 결정). 비밀값은 사용자가 직접 입력
 - master `aed2dc2` (PR #35까지 머지·배포). 운영: https://19auto-blog.vercel.app — #32 머지는 push가 Vercel에 전달되지 않아 10/23 Vercel API로 직접 운영 배포, #33·#35는 자동 배포 정상
 - 개인정보처리방침·이용약관(10/26): PR #35 머지·배포 — 정적 문서 `frontend/public/privacy.html`·`terms.html` → 운영 `/privacy.html`·`/terms.html` 200, 대시보드 하단 링크. 구글 OAuth 동의 화면 등록 완료(사용자). 남은 것: 해외 위탁 표의 Neon 리전("미국 등"으로 적음) 확인, Google 연동 기능을 만들면 방침 11조를 실제 스코프로 갱신. 공개 문의 이메일은 jinkoo1.lee@gmail.com
 - image-abstract-scenes(PR #32)·image-scene-followup(PR #33) 운영 적용 확인(10/26): 5+6번 적용 글 #89~#96 8개 vs 이전 #57~#84 28개 — 글자 사물·키보드 anchor 25→0, 빈 종이 글당 1.36→0.13, 할 일 소제목 종이 11→0, 3점 이하 11.2%→4.7%, 서버 랙 표지 8/28→0/8, 상자 7.9%→4.7%. 눈 점검 4장 글자 0. 새로 보이는 일반 장면: 흐린 화면의 휴대폰·태블릿
@@ -27,8 +28,8 @@ bkit 자동화 L1(단계마다 확인) → 각 단계 끝나면 **"다음 진행
 | ~~4~~ | ~~`ai-call-cleanup`~~ | **완료 10/22** — 3곳을 askText(`{ system }` 옵션)로 통합, 직접 호출 5곳 → 2곳(askText·scoreImage). 빈 응답 오류만 통일. 보고서 `docs/archive/2026-10/ai-call-cleanup/ai-call-cleanup.report.md` | — |
 | ~~5~~ | ~~`image-abstract-scenes`~~ | **완료 10/22** — 운영 162장 분석: 3점 17장 중 11장이 글자 사물(달력·계기판)·키보드 장면. 규칙 3줄 + 감지 → 한 번 다시 계획. 로컬 3세트: 숫자 결함 2→0, 3점 이하 6→3, 감지 anchor 18→0. 보고서 `docs/archive/2026-10/image-abstract-scenes/image-abstract-scenes.report.md` | — |
 | ~~6~~ | ~~`image-scene-followup`~~ | **완료 10/22** — 소제목 장면의 32%가 빈 종이(눈 점검 16장 중 11장 약함). 할 일 소제목은 실제 대상에 하는 행동, 빈 종이는 글당 1장. 바뀐 소제목 14장: 분명 2→9, 계획 종이 글당 2.2→0.1. 보고서 `docs/archive/2026-10/image-scene-followup/image-scene-followup.report.md` | — |
-| 0 | `ideogram-key` (긴급, 코드 아님) | Ideogram 키 401로 10/24부터 운영 이미지 생성 중단, 12개 글 멈춤. 사용자: 새 키 발급·Vercel/로컬 교체·다시 배포 → Claude: 배포 확인·멈춘 글 이어하기(예산 확인 후). 키가 다시 조용히 무효화되면 알 수 있게 크론 실패 알림을 둘지 검토 | 작음 |
-| 7 | `image-device-text` | 6번에서 남은 것: Ideogram이 기기·상자 표면에 엉터리 상표 글자를 넣음(채점도 4점), 종이 대신 배송 상자 반복. 채점 기준·제외어를 바꾸면 채점만의 효과를 먼저 잴 것. 이미지 예산 필요 | 중 |
+| 0 | `image-jobs` (PR 대기) | **10/30 완료** — 작업 폴더 + 구독 `agy` 작업자로 API 요금 0. 로컬 #99 자동 6장(장면당 55~60초, 글자 0/6, 관련성 5·5·4·4·4·4). 멈춘 글은 글마다 "이어하기"를 누르면 작업 대기로 들어간다(일괄 이어하기 제외). 보고서 `docs/04-report/image-jobs.report.md` | — |
+| 7 | `image-device-text` | 6번에서 남은 것: 이미지 모델이 기기·상자 표면에 엉터리 상표 글자를 넣음(Ideogram 때 관찰, 채점도 4점 — 구독 Gemini로 바뀐 뒤 다시 확인), 종이 대신 배송 상자 반복. 채점 기준·제외어를 바꾸면 채점만의 효과를 먼저 잴 것. 이미지 예산 필요 | 중 |
 
 ## 붙여 넣을 프롬프트
 

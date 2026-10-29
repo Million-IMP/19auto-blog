@@ -13,19 +13,14 @@ export function scoreMin() {
   return envNumber('IMAGE_SCORE_MIN', 3);
 }
 
-// 글 하나에서 다시 만들 수 있는 최대 장수 (기본 2). Plan: 글당 추가 비용 ≤ $0.15
+// 글 하나에서 다시 만들 수 있는 최대 장수 (기본 2). 장당 생성 비용·사용량이 그만큼 늘어난다.
 export function maxRetries() {
   return envNumber('IMAGE_MAX_RETRIES', 2);
 }
 
-// 글 하나에서 24시간 안에 이미지 세트를 다시 만들 수 있는 횟수 (기본 3). 한 번에 약 $0.35가 든다.
+// 글 하나에서 24시간 안에 이미지 세트를 다시 만들 수 있는 횟수 (기본 3). 한 번에 약 7장을 새로 만든다.
 export function maxRebuilds() {
   return envNumber('IMAGE_MAX_REBUILDS', 3);
-}
-
-// 다시 만들 때 쓰는 Ideogram 속도. 처음 생성(turbo $0.03)보다 한 단계 높은 품질(default $0.06)
-export function retrySpeed(): 'turbo' | 'default' {
-  return process.env.IDEOGRAM_RETRY_SPEED?.toLowerCase() === 'turbo' ? 'turbo' : 'default';
 }
 
 export function needsRetry(scene: ImageScene, plan: ImagePlan) {

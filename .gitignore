@@ -13,3 +13,4 @@ backend/scratch-*.ts
 !.env.example
 backend/prisma/schema.postgres.prisma
 backend/generated-images
+image-jobs/

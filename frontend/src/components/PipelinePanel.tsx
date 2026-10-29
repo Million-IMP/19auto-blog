@@ -3,7 +3,7 @@ import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { RotateCw, ChevronDown, ChevronRight } from 'lucide-react';
-import { Button, PIPELINE_STAGES } from './ui';
+import { Badge, Button, PIPELINE_STAGES } from './ui';
 
 const STAGES = PIPELINE_STAGES;
 
@@ -29,6 +29,8 @@ type ImageScene = {
   score?: number;
   scoreReason?: string;
   retried?: boolean;
+  // image-jobs: 새 그림을 기다리는 장면 (이전 그림은 올라올 때까지 그대로 보인다)
+  pending?: boolean;
 };
 type ImagePlan = { style: string; provider?: string; retries?: number; cover: ImageScene; sections: ImageScene[] };
 
@@ -71,6 +73,7 @@ function ImagePlanList({ plan, regenerating, busy, onRegenerate }: { plan: Image
             <div className="flex items-center gap-2 min-w-0">
               <p className="font-semibold text-ink truncate">{label}</p>
               <ScoreBadge scene={scene} />
+              {(!scene.url || scene.pending) && <Badge tone="draft" title="PC 작업자(scripts/image-jobs.js)가 그림을 올리면 채워집니다">작업 대기</Badge>}
             </div>
             {scene.anchor && <p className="text-ink-2">대상: {scene.anchor.split('/')[0].trim()}</p>}
             <p className="text-ink-2">{scene.scene}</p>
@@ -110,7 +113,7 @@ export function PipelinePanel({ post, resuming, onResume, onChanged }: { post: P
   const failed = Boolean(post.stageError);
   const plan = readPlan(post.imagePlan);
   const [regenerating, setRegenerating] = useState<number | null>(null);
-  // 이미지 세트 다시 만들기는 Ideogram 비용이 드니 한 번 더 눌러야 실행한다
+  // 이미지 세트 다시 만들기는 그림 약 7장의 구독 사용량이 드니 한 번 더 눌러야 실행한다
   const [rebuildArmed, setRebuildArmed] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
   const canRebuild = Boolean(plan) && post.stage === 'READY' && post.status !== 'PUBLISHED';
