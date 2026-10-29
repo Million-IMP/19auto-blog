@@ -67,7 +67,7 @@ flowchart LR
 | 백엔드 | Express 5, Prisma 5 (로컬 SQLite / 배포 Postgres) |
 | 프론트엔드 | React 19, Vite, Tailwind CSS 4 |
 | AI | Anthropic Claude (`ANTHROPIC_MODEL`, 기본 `claude-haiku-5-5`) |
-| 이미지 | Ideogram 3.0 (선택) 또는 pollinations (무료 기본값) |
+| 이미지 | 구독 Gemini (운영자 PC의 Antigravity CLI가 만들어 올림, 선택) 또는 pollinations (무료 기본값) |
 | 배포 | Vercel 함수 + Vercel Cron + Vercel Blob, Neon Postgres |
 
 ```
@@ -78,7 +78,7 @@ backend/src/auth.ts     비밀번호 접근 제한
 backend/src/services/   aiService · draftPipeline · imageProvider · topicService · publishService · automationService
 backend/prisma/         schema.prisma (SQLite 기준, Postgres 스키마는 자동 생성)
 frontend/src/           pages/ (화면), components/ (PipelinePanel, LoginGate 등)
-scripts/                start.js (로컬 실행), prepare-db.js (DB 준비), check-ideogram.js (이미지 설정 확인)
+scripts/                start.js (로컬 실행), prepare-db.js (DB 준비), image-jobs.js (이미지 작업 받기·만들기·올리기)
 ```
 
 ---
@@ -117,19 +117,22 @@ scripts/                start.js (로컬 실행), prepare-db.js (DB 준비), che
 4. **Settings → Environment Variables**에 `DIRECT_URL`을 추가하고 값으로 `DATABASE_URL_UNPOOLED`의 값을 넣습니다.
 5. **Deployments → Redeploy**. 빌드 중에 DB 테이블이 자동으로 만들어집니다.
 
-### 2) Ideogram 이미지 쓰기 (선택)
-1. [Ideogram API](https://developer.ideogram.ai)에서 키를 만들고 크레딧을 충전합니다.
-2. Vercel **Storage → Blob 만들기 → 프로젝트 연결** (`BLOB_READ_WRITE_TOKEN` 자동 등록). Ideogram 이미지 주소는 시간이 지나면 사라지므로 받은 즉시 Blob에 저장합니다.
-3. 환경변수 추가: `IMAGE_PROVIDER=ideogram`, `IDEOGRAM_API_KEY`, `IDEOGRAM_RENDERING_SPEED`(선택)
-4. 로컬에서 과금 없이 설정을 확인하려면: `node scripts/check-ideogram.js`
+### 2) 이미지 작업 폴더 쓰기 (선택, API 요금 없음)
+서버는 그림을 만들지 않고 장면별 "이미지 작업"만 남깁니다. 본문은 계속 완성되고, 대시보드에 "이미지 대기 N장"이 보입니다. 그림은 PC에서 채워 올립니다.
 
-| `IDEOGRAM_RENDERING_SPEED` | 장당 | 생성 시간 | 글 1편(약 7장) |
-|---|---|---|---|
-| `turbo` (기본) | $0.03 | 약 5초 | 약 $0.21 |
-| `default` | $0.06 | 약 14초 | 약 $0.42 |
-| `quality` | $0.09 | 약 13초 | 약 $0.63 |
+1. Vercel **Storage → Blob 만들기 → 프로젝트 연결** (`BLOB_READ_WRITE_TOKEN` 자동 등록). 올린 그림을 Blob에 저장합니다.
+2. 환경변수 `IMAGE_PROVIDER=jobs`를 넣고 다시 배포합니다.
+3. PC에서 채웁니다. 올리기는 운영자 전용이라 먼저 PowerShell에서 `$env:APP_PASSWORD = Read-Host`로 비밀번호를 넣습니다.
+   - **자동**: Antigravity CLI(`agy`)에 구독 계정으로 로그인한 뒤 `npm run image-jobs -- run` (받기 → `agy`로 장면마다 1장 생성 → 올리기)
+   - **수동**: `npm run image-jobs -- pull` → `image-jobs/pending/<글>-<장면>.txt`의 프롬프트로 Gemini 앱 등에서 그림 생성 → `image-jobs/done/<글>-<장면>.png`(또는 .jpg·.webp)로 저장 → `npm run image-jobs -- push`
+4. 글의 마지막 장면이 올라가면 본문에 그림이 들어가고 발행 대기(READY)로 넘어갑니다. "다시 생성"은 그 장면을 다시 작업으로 돌리고, 새 그림이 올라올 때까지 이전 그림을 둡니다.
 
-> 2026년 10월 Ideogram `dry_run` 견적 기준. Vercel에서는 한 번 실행에 280초까지라 보통 한 번에 다 만들고, 모자라면 나머지는 이어서 만듭니다.
+| PC 환경변수 | 기본 | 설명 |
+|---|---|---|
+| `IMAGE_JOBS_URL` | `https://19auto-blog.vercel.app` | 작업을 받고 올릴 서버 (로컬 검증은 `http://localhost:3001`) |
+| `IMAGE_JOBS_MAX` | `6` | `generate`가 한 번에 만들 최대 장수 (구독 사용량) |
+| `IMAGE_JOBS_TIMEOUT_SEC` | `180` | 장면 하나를 기다리는 시간 |
+| `APP_PASSWORD` | | 운영자 비밀번호 (출력·저장하지 않음) |
 
 ### 3) 매시간 자동 실행 (GitHub Actions)
 Vercel Hobby 크론은 하루 1회까지라, 초안 1건(6단계)을 끝내는 데 며칠이 걸립니다. `.github/workflows/hourly-cron.yml`이 매시간 7분에 `/api/cron/daily`를 호출해 수집과 단계 진행을 이어갑니다.
@@ -159,11 +162,8 @@ GitHub와 연결된 Vercel 프로젝트는 `master`에 푸시하면 자동으로
 | `DB_PUSH_ON_BUILD` | | `1`이면 Vercel 빌드 때 DB 구조 반영. 데이터가 지워지는 변경은 Prisma가 거부해 빌드가 멈춥니다 |
 | `CRON_SECRET` | 배포 시 권장 | 크론 호출 확인 (Vercel 크론 · GitHub Actions 공통) |
 | `APP_PASSWORD` | 배포 시 권장 | 운영자 비밀번호. 사용후기 삭제에 필요 (쿠키 30일). 사이트 접속은 누구나 가능 |
-| `IMAGE_PROVIDER` | | `ideogram` 또는 비움(pollinations) |
-| `IDEOGRAM_API_KEY` | Ideogram 사용 시 | |
-| `IDEOGRAM_RENDERING_SPEED` | | `turbo` · `default` · `quality` |
-| `IDEOGRAM_MAGIC_PROMPT` | | 기본 `off` (계획한 프롬프트 그대로 사용) |
-| `BLOB_READ_WRITE_TOKEN` | Vercel + Ideogram | Vercel Blob 저장소 토큰 |
+| `IMAGE_PROVIDER` | | `jobs`(PC에서 그림을 채워 올림) 또는 비움(pollinations) |
+| `BLOB_READ_WRITE_TOKEN` | Vercel + jobs | 올린 그림을 저장할 Vercel Blob 토큰 |
 | `DISABLE_LOCAL_CRON` | | `1`이면 로컬 node-cron(매시 정각) 끔 |
 
 ---

@@ -7,7 +7,8 @@ import { getAutomationConfig, runAutomationCycle, updateAutomationConfig } from 
 import { resolveDraftInputs } from './services/writingPlan';
 import { markPublished, verifyPublished } from './services/publishService';
 import { draftFromTopic, evaluateInbox, TOPIC_STATUSES, updateTopic } from './services/topicService';
-import { advancePost, createPipelinePost, getBlogProfile, PipelineError, rebuildImageSet, regenerateImage, relinkPostImages, requestDeadline, resumePost, updateBlogProfile } from './services/draftPipeline';
+import { advancePost, attachImage, createPipelinePost, getBlogProfile, listImageJobs, PipelineError, rebuildImageSet, regenerateImage, relinkPostImages, requestDeadline, resumePost, updateBlogProfile } from './services/draftPipeline';
+import { detectImageType, MAX_UPLOAD_BYTES } from './services/imageJobs';
 import { parseRelinkPairs } from './services/imageRelink';
 import { createFeedback, deleteFeedback, listFeedback, parseFeedback } from './services/feedbackService';
 import { prisma } from './db';
@@ -64,7 +65,7 @@ app.get('/api/stats', async (req, res) => {
 // 대시보드 보드용 요약: 최근 수집 3건 + 블로그 초안 목록(본문 제외). 목록 전체를 받지 않게 한다.
 app.get('/api/dashboard', async (req, res) => {
   try {
-    const [inbox, blogDrafts] = await Promise.all([
+    const [inbox, blogDrafts, imageJobs] = await Promise.all([
       prisma.inbox.findMany({
         where: { processed: false },
         orderBy: { createdAt: 'desc' },
@@ -76,8 +77,10 @@ app.get('/api/dashboard', async (req, res) => {
         orderBy: { createdAt: 'desc' },
         select: { id: true, title: true, stage: true, stageError: true, createdAt: true },
       }),
+      // Plan FR-08 — PC 작업자가 채울 그림 수 (IMAGE_PROVIDER=jobs)
+      listImageJobs(),
     ]);
-    res.json({ inbox, blogDrafts });
+    res.json({ inbox, blogDrafts, imageJobs: { scenes: imageJobs.scenes, posts: imageJobs.posts } });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -625,13 +628,56 @@ app.post('/api/posts/:id/images/relink', requireAdmin, async (req, res) => {
   }
 });
 
-// 3.0.4 로컬에 저장한 Ideogram 이미지 (Vercel에서는 Blob 주소를 쓰므로 쓰지 않는다)
+// 3.0.4 로컬에 저장한 이미지 (image-jobs 업로드. Vercel에서는 Blob 주소를 쓰므로 쓰지 않는다)
 app.get('/api/images/:file', (req, res) => {
   const file = String(req.params.file);
   if (!/^[\w-]+\.(png|jpg|webp)$/.test(file)) return res.status(400).json({ error: '잘못된 파일 이름입니다.' });
   res.sendFile(file, { root: LOCAL_IMAGE_DIR, maxAge: '30d' }, (err) => {
     if (err && !res.headersSent) res.status(404).json({ error: '이미지를 찾을 수 없습니다.' });
   });
+});
+
+// 3.0.5 이미지 작업 (IMAGE_PROVIDER=jobs): PC 작업자(scripts/image-jobs.js)가 목록을 받아 그림을 채워 올린다
+// Design Ref: image-jobs §4 — 다른 GET처럼 목록은 공개, 올리기는 운영자 전용
+app.get('/api/image-jobs', async (req, res) => {
+  try {
+    res.json(await listImageJobs());
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+const UPLOAD_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+const rawImage = express.raw({ type: UPLOAD_TYPES, limit: MAX_UPLOAD_BYTES });
+
+// 본문은 그림 바이트 그대로. 4MB를 넘으면 413을 JSON으로 돌려준다(Vercel 요청 제한 4.5MB 안).
+function readImageBody(req: express.Request, res: express.Response, next: express.NextFunction) {
+  rawImage(req, res, (err?: any) => {
+    if (!err) return next();
+    const tooLarge = err.type === 'entity.too.large' || err.status === 413;
+    res.status(tooLarge ? 413 : 400).json({ error: tooLarge ? '4MB 이하 그림만 올릴 수 있습니다.' : '그림 본문을 읽지 못했습니다.' });
+  });
+}
+
+// 그림 1장 올리기 (0 = 표지, 1.. = 소제목 순서). ?source=agy|manual
+app.post('/api/image-jobs/:postId/:index', requireAdmin, readImageBody, async (req, res) => {
+  const id = Number(req.params.postId);
+  const index = Number(req.params.index);
+  if (!Number.isInteger(id) || id < 1 || !Number.isInteger(index) || index < 0) {
+    return res.status(400).json({ error: '잘못된 글 번호 또는 장면 번호입니다.' });
+  }
+  const data = Buffer.isBuffer(req.body) ? req.body : null;
+  const mediaType = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+  // Content-Type과 파일 앞부분 서명이 같은 형식이어야 받는다.
+  if (!data || detectImageType(data) !== mediaType) {
+    return res.status(400).json({ error: 'PNG·JPEG·WebP 그림만 올릴 수 있습니다.' });
+  }
+  const source = req.query.source === 'agy' ? 'agy' : 'manual';
+  try {
+    res.json(await withDeadline(requestDeadline(), () => attachImage(id, index, { data, mediaType, source })));
+  } catch (error: any) {
+    res.status(error instanceof PipelineError ? error.status : 500).json({ error: error.message });
+  }
 });
 
 // 3.0.2 블로그 프로필 (모든 초안 공통 기준)

@@ -5,6 +5,7 @@
     "start": "node scripts/start.js",
     "start:local": "node scripts/start-local.js",
     "seed:local": "node scripts/seed-local.js",
+    "image-jobs": "node scripts/image-jobs.js",
     "build": "npm run build --prefix frontend",
     "postinstall": "node scripts/prepare-db.js"
   },

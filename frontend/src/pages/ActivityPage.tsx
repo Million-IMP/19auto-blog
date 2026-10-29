@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
-import { Activity, AlertTriangle, Bot, CheckCircle2, Hand, RotateCcw, Rss } from 'lucide-react';
+import { Activity, AlertTriangle, Bot, CheckCircle2, Hand, ImageUp, RotateCcw, Rss } from 'lucide-react';
 import { Badge, Button, Card, EmptyState, Notice, Page, PageHeader, Segmented, cn, type BadgeTone } from '../components/ui';
 
 const API_URL = '/api';
@@ -26,6 +26,8 @@ const EVENT_STYLE: Record<string, { label: string; tone: BadgeTone; icon: typeof
   POST_STAGE_ERROR: { label: '단계 실패', tone: 'danger', icon: AlertTriangle },
   CRON_ERROR: { label: '수집 오류', tone: 'danger', icon: AlertTriangle },
   AI_TOKEN_NEAR_LIMIT: { label: 'AI 길이 경고', tone: 'draft', icon: AlertTriangle },
+  // image-jobs: PC 작업자가 장면 그림 1장을 올림
+  IMAGE_UPLOAD: { label: '그림 올림', tone: 'info', icon: ImageUp },
 };
 
 function dayLabel(date: Date) {

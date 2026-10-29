@@ -1,8 +1,9 @@
 import type { Post } from '@prisma/client';
 import { prisma } from '../db';
 import { aiService, extractUrlText, remainingTime, withDeadline, type DraftContext, type ImagePlan, type ImageScene, type Outline } from './aiService';
-import { imageProvider, randomSeed } from './imageProvider';
-import { hasListedAnchor, hasTypingAnchor, isActionHeading, maxRebuilds, needsRetry, paperWord, retryPrompt, retrySpeed, scoreScene, stripAiImages, stripStyleWords, textObjectWord } from './imageQuality';
+import { imageMode, imageProvider, randomSeed, storeImage } from './imageProvider';
+import { applyUpload, isJob, jobItems, sceneAt } from './imageJobs';
+import { hasListedAnchor, hasTypingAnchor, isActionHeading, maxRebuilds, needsRetry, paperWord, retryPrompt, scoreScene, stripAiImages, stripStyleWords, textObjectWord } from './imageQuality';
 import { relinkUrls, type RelinkPair } from './imageRelink';
 
 // 상태 코드가 있는 오류. 라우트가 그대로 응답 코드로 쓴다.
@@ -174,7 +175,8 @@ function insertImages(content: string, plan: ImagePlan) {
   return output.join('\n');
 }
 
-async function renderScene(plan: ImagePlan, scene: ImageScene, options: { prompt?: string; speed?: 'turbo' | 'default' } = {}) {
+// render 모드에서만 부른다. jobs 모드는 PC 작업자가 그림을 올린다(attachImage).
+async function renderScene(plan: ImagePlan, scene: ImageScene, options: { prompt?: string } = {}) {
   const seed = randomSeed();
   const image = await imageProvider().render({
     prompt: options.prompt ?? scene.prompt,
@@ -184,16 +186,15 @@ async function renderScene(plan: ImagePlan, scene: ImageScene, options: { prompt
     width: 800,
     height: scene === plan.cover ? 400 : 450,
     seed,
-    speed: options.speed,
   });
   plan.provider = image.provider;
   return { image, seed };
 }
 
-// Design Ref: §2.2 — 점수가 낮은 장면을 품질을 올려 한 번 다시 만든다. 새 이미지 점수가 더 낮으면 원래 이미지를 둔다.
+// Design Ref: §2.2 — 점수가 낮은 장면을 대상을 못박은 prompt로 한 번 다시 만든다. 새 이미지 점수가 더 낮으면 원래 이미지를 둔다.
 async function retryScene(plan: ImagePlan, scene: ImageScene) {
   try {
-    const { image, seed } = await renderScene(plan, scene, { prompt: retryPrompt(scene), speed: retrySpeed() });
+    const { image, seed } = await renderScene(plan, scene, { prompt: retryPrompt(scene) });
     // 렌더에 성공했을 때만 재시도 횟수를 쓴다(실패한 요청은 비용이 들지 않는다).
     plan.retries = (plan.retries ?? 0) + 1;
     scene.retried = true;
@@ -218,8 +219,13 @@ export async function regenerateImage(postId: number, index: number) {
     const post = await prisma.post.findUniqueOrThrow({ where: { id: postId } });
     if (!post.imagePlan) throw new PipelineError('이미지 계획이 없는 글입니다.', 409);
     const plan = JSON.parse(post.imagePlan) as ImagePlan;
-    const scene = index === 0 ? plan.cover : plan.sections[index - 1];
+    const scene = sceneAt(plan, index);
     if (!scene) throw new PipelineError('해당 장면을 찾을 수 없습니다.', 404);
+    if (imageMode() === 'jobs') {
+      // Plan FR-07 — 그림을 만들지 않고 작업 대기로 둔다. 새 그림이 올라올 때까지 이전 그림과 본문은 그대로다.
+      scene.pending = true;
+      return await prisma.post.update({ where: { id: postId }, data: { imagePlan: JSON.stringify(plan) } });
+    }
     const { image, seed } = await renderScene(plan, scene);
     await scoreScene(scene, image);
     const content = scene.url ? post.content.split(scene.url).join(image.url) : post.content;
@@ -272,7 +278,7 @@ export async function rebuildImageSet(postId: number, deadline = requestDeadline
   if (post.stage !== 'READY' && post.stage !== 'IMAGES') {
     throw new PipelineError('본문이 완성된 글(이미지 단계 이후)만 이미지 세트를 다시 만들 수 있습니다.', 409);
   }
-  // Plan SC-4 — 한 번에 약 $0.35. 계획(imagePlan)은 지워지므로 횟수는 활동 기록으로 센다.
+  // Plan SC-4 — 한 번에 계획 AI 호출과 약 7장의 그림이 든다. 계획(imagePlan)은 지워지므로 횟수는 활동 기록으로 센다.
   const recent = await prisma.systemLog.count({
     where: { event: 'IMAGE_REBUILD', message: { startsWith: `#${postId} ` }, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60_000) } },
   });
@@ -290,6 +296,60 @@ export async function rebuildImageSet(postId: number, deadline = requestDeadline
     .create({ data: { event: 'IMAGE_REBUILD', message: `#${postId} "${post.title}" 이미지 세트 다시 만들기 (이전 관련성 평균 ${averageScore(previous)})` } })
     .catch(() => {});
   return advancePost(postId, deadline, { claimed: true });
+}
+
+// Design Ref: image-jobs §4.2 — 그림을 기다리는 IMAGES 글과 다시 생성 대기 장면이 있는 글. 멈춘 글(stageError)은 이어하기 전까지 뺀다.
+// render 모드에서는 크론이 직접 그리는 중인 장면이므로 PC 작업으로 내놓지 않는다(구독 사용량 중복·대시보드 오안내 방지).
+export async function listImageJobs() {
+  if (imageMode() !== 'jobs') return { scenes: 0, posts: 0, jobs: [] };
+  const found = await prisma.post.findMany({
+    where: { imagePlan: { not: null }, stageError: null, OR: [{ stage: 'IMAGES' }, { imagePlan: { contains: '"pending":true' } }] },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true, title: true, imagePlan: true },
+  });
+  const jobs = found.flatMap(jobItems);
+  return { scenes: jobs.length, posts: new Set(jobs.map((job) => job.postId)).size, jobs };
+}
+
+// Plan FR-02 — jobs 모드에서 그림을 기다리는 글은 크론 이어하기 목록(batchSize개, 오래된 순)에서 뺀다. 자리를 차지하면 본문 단계 글이 멈춘다.
+export function waitingForImagesWhere() {
+  return imageMode() === 'jobs' ? { NOT: { stage: 'IMAGES', imagePlan: { not: null } } } : {};
+}
+
+// Design Ref: image-jobs §4.2 — PC에서 올린 그림 1장을 작업 대기 장면에 넣고 채점한다. regenerateImage와 같은 잠금 안에서 저장하고,
+// IMAGES 글의 마지막 작업이면 본문에 넣어 READY로 만든다.
+export async function attachImage(postId: number, index: number, upload: { data: Buffer; mediaType: string; source: string }) {
+  const found = await prisma.post.findUnique({ where: { id: postId } });
+  if (!found) throw new PipelineError('글을 찾을 수 없습니다.', 404);
+  if (!(await claimPost(postId))) throw new PipelineError(BUSY_MESSAGE, 409);
+  const startedAt = Date.now();
+  try {
+    const post = await prisma.post.findUniqueOrThrow({ where: { id: postId } });
+    if (!post.imagePlan) throw new PipelineError('이미지 계획이 없는 글입니다.', 409);
+    const plan = JSON.parse(post.imagePlan) as ImagePlan;
+    const scene = sceneAt(plan, index);
+    if (!scene) throw new PipelineError('해당 장면을 찾을 수 없습니다.', 404);
+    if (!isJob(scene)) throw new PipelineError('이 장면은 작업 대기가 아닙니다.', 409);
+
+    const url = await storeImage(upload.data, upload.mediaType);
+    let content = applyUpload(post.content, plan, scene, { url, source: upload.source });
+    await scoreScene(scene, { url, data: upload.data, mediaType: upload.mediaType });
+    const remaining = [plan.cover, ...plan.sections].filter(isJob).length;
+    const ready = post.stage === 'IMAGES' && remaining === 0;
+    if (ready) content = insertImages(content, plan);
+    const saved = await prisma.post.update({
+      where: { id: postId },
+      data: { content, imagePlan: JSON.stringify(plan), ...(ready ? { stage: 'READY', stageError: null } : {}) },
+    });
+    await prisma.systemLog
+      .create({ data: { event: 'IMAGE_UPLOAD', message: `#${postId} 장면 ${index} 그림 올림 (${upload.source}, 관련성 ${scene.score ?? '-'}, 남은 ${remaining}장)` } })
+      .catch(() => {});
+    if (ready) await logPostResult(post, saved, startedAt);
+    // completed: 이번 업로드로 글이 READY가 됐다 (이미 READY인 글의 장면 교체는 false)
+    return { id: postId, index, url, score: scene.score ?? null, remaining, stage: saved.stage, completed: ready };
+  } finally {
+    await prisma.post.updateMany({ where: { id: postId }, data: { lockedUntil: null } });
+  }
 }
 
 export async function createPipelinePost(input: { brief: Brief; inboxId?: number | null }) {
@@ -427,6 +487,7 @@ async function runStage(current: Post): Promise<Post> {
         plan = await planImageSet(post);
         post = await prisma.post.update({ where, data: { imagePlan: JSON.stringify(plan) } });
       }
+      if (imageMode() === 'jobs') return waitForImages(post, plan);
       for (const scene of [plan.cover, ...plan.sections]) {
         if (scene.url && scene.checked) continue;
         // 장면마다 저장하므로, 시간이 부족하면 여기서 멈추고 다음 실행이 남은 장면부터 이어간다.
@@ -455,6 +516,24 @@ async function runStage(current: Post): Promise<Post> {
     default:
       throw new Error(`알 수 없는 단계: ${post.stage}`);
   }
+}
+
+// Plan FR-01 — jobs 모드의 IMAGES 단계는 렌더하지 않는다. 그림은 있지만 채점 전에 멈춘 장면(이전 렌더)만 채점하고,
+// 작업이 남으면 그대로 돌려줘 advancePost가 멈추게 한다. 작업이 없으면 본문에 넣고 READY.
+async function waitForImages(current: Post, plan: ImagePlan) {
+  let post = current;
+  const where = { id: post.id };
+  for (const scene of [plan.cover, ...plan.sections]) {
+    if (!scene.url || scene.checked) continue;
+    if (remainingTime() < MIN_STAGE_MS) return post;
+    await scoreScene(scene, { url: scene.url });
+    post = await prisma.post.update({ where, data: { imagePlan: JSON.stringify(plan) } });
+  }
+  if ([plan.cover, ...plan.sections].some(isJob)) return post;
+  return prisma.post.update({
+    where,
+    data: { content: insertImages(post.content, plan), imagePlan: JSON.stringify(plan), stage: 'READY' },
+  });
 }
 
 // 요청 시작 시각 기준 마감. Vercel 함수 제한(vercel.json maxDuration 300초) 안에서 끝내고, 남은 단계는 다음 실행이 이어간다.
@@ -524,6 +603,8 @@ export async function advancePost(
       try {
         await prisma.post.update({ where: { id: postId }, data: { lockedUntil: new Date(Date.now() + LOCK_MS) } });
         post = await withDeadline(deadline, () => runStage(current));
+        // Plan FR-02 — 진행이 없으면(이미지 작업 대기) 같은 단계를 다시 돌리지 않는다. 로컬은 마감이 없어 끝나지 않는다.
+        if (post.stage === current.stage && post.imagePlan === current.imagePlan) break;
       } catch (err: any) {
         const message = `[${current.stage}] ${String(err?.message || err)}`.slice(0, 300);
         await prisma.post.updateMany({ where: { id: postId }, data: { stageError: message } });

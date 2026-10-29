@@ -2,7 +2,7 @@ import { aiService } from './aiService';
 import { prisma } from '../db';
 import type { Post } from '@prisma/client';
 import { resolveDraftInputs } from './writingPlan';
-import { advancePost, createPipelinePost, requestDeadline, unlockedWhere } from './draftPipeline';
+import { advancePost, createPipelinePost, requestDeadline, unlockedWhere, waitingForImagesWhere } from './draftPipeline';
 import { draftFromTopic, evaluateInbox } from './topicService';
 
 const DRAFT_SOURCES = ['ALL_RSS', 'SELECTED_TOPICS'];
@@ -148,9 +148,9 @@ export async function runAutomationCycle(trigger: 'cron' | 'manual', deadline = 
   try {
     const config = await getAutomationConfig();
 
-    // 1) 이전 실행에서 멈춘 초안을 멈춘 단계부터 이어서 진행
+    // 1) 이전 실행에서 멈춘 초안을 멈춘 단계부터 이어서 진행 (PC 작업자의 그림을 기다리는 글은 빼서 자리를 차지하지 않게 한다)
     const unfinished = await prisma.post.findMany({
-      where: { stage: { not: 'READY' }, stageError: null, ...unlockedWhere() },
+      where: { stage: { not: 'READY' }, stageError: null, ...unlockedWhere(), ...waitingForImagesWhere() },
       orderBy: { createdAt: 'asc' },
       take: config.batchSize,
     });

@@ -20,6 +20,11 @@ vi.mock('../db', () => ({
     post: {
       findUnique: async ({ where }: any) => posts.get(where.id) ?? null,
       findUniqueOrThrow: async ({ where }: any) => posts.get(where.id)!,
+      // listImageJobs(): 계획이 있고 멈추지 않은 IMAGES 글 또는 다시 생성 대기 장면이 있는 글
+      findMany: async () =>
+        [...posts.values()].filter(
+          (p) => p.imagePlan && !p.stageError && (p.stage === 'IMAGES' || p.imagePlan.includes('"pending":true')),
+        ),
       update: async ({ where, data }: any) => {
         const next = { ...posts.get(where.id)!, ...data };
         posts.set(where.id, next);
@@ -49,14 +54,20 @@ vi.mock('../db', () => ({
 
 // 호출마다 다른 주소를 돌려줘서 재생성 여부를 본문에서 구분할 수 있게 한다.
 const render = vi.hoisted(() => vi.fn());
+// image-jobs: IMAGE_PROVIDER 대신 테스트마다 모드를 바꾸고, 업로드 저장은 주소만 돌려준다.
+const mode = vi.hoisted(() => ({ value: 'render' as 'render' | 'jobs' }));
+const store = vi.hoisted(() => vi.fn());
 
-vi.mock('./imageProvider', () => ({
+vi.mock('./imageProvider', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./imageProvider')>()),
   imageProvider: () => ({ name: 'fake', render }),
   randomSeed: () => 1,
+  imageMode: () => mode.value,
+  storeImage: store,
 }));
 
 const { aiService } = await import('./aiService');
-const { advancePost, isPublicUrl, rebuildImageSet, regenerateImage, resumePost } = await import('./draftPipeline');
+const { advancePost, attachImage, isPublicUrl, listImageJobs, rebuildImageSet, regenerateImage, resumePost, waitingForImagesWhere } = await import('./draftPipeline');
 
 const BODY = '도입 문단입니다.\n\n## 물은 언제 주나요?\n흙이 마르면 줍니다.\n\n## 겨울에는 어떻게 하나요?\n횟수를 줄입니다.';
 
@@ -96,6 +107,10 @@ beforeEach(() => {
   let count = 0;
   render.mockReset();
   render.mockImplementation(async () => ({ url: `https://img.test/${++count}.png`, provider: 'fake', data: Buffer.from('img'), mediaType: 'image/png' }));
+  mode.value = 'render';
+  let stored = 0;
+  store.mockReset();
+  store.mockImplementation(async () => `https://blob.test/${++stored}.jpg`);
   vi.spyOn(aiService, 'scoreImage').mockResolvedValue({ score: 5, reason: '대상이 보임' });
   vi.spyOn(aiService, 'generateOutline').mockResolvedValue({
     keyword: '실내 식물',
@@ -194,7 +209,7 @@ describe('IMAGES 단계 채점·재생성', () => {
     expect(plan.retries ?? 0).toBe(0);
   });
 
-  it('점수가 낮은 장면은 품질을 올려 한 번 다시 만들고 새 이미지로 바꾼다', async () => {
+  it('점수가 낮은 장면은 대상을 못박은 prompt로 한 번 다시 만들고 새 이미지로 바꾼다', async () => {
     seedPost();
     vi.mocked(aiService.scoreImage)
       .mockResolvedValueOnce({ score: 5, reason: '' }) // 표지
@@ -204,7 +219,6 @@ describe('IMAGES 단계 채점·재생성', () => {
     const post = await advancePost(1, Infinity);
 
     expect(render).toHaveBeenCalledTimes(4);
-    expect(render.mock.calls[2][0].speed).toBe('default');
     expect(render.mock.calls[2][0].prompt).toContain('must be clearly visible');
     const plan = readyPlan();
     expect(plan.retries).toBe(1);
@@ -253,7 +267,7 @@ describe('IMAGES 단계 채점·재생성', () => {
     vi.mocked(aiService.scoreImage).mockResolvedValueOnce({ score: 1, reason: '' }).mockResolvedValue({ score: 5, reason: '' });
     render
       .mockResolvedValueOnce({ url: 'https://img.test/a.png', provider: 'fake' })
-      .mockRejectedValueOnce(new Error('Ideogram 429'));
+      .mockRejectedValueOnce(new Error('이미지 공급자 429'));
     const post = await advancePost(1, Infinity);
 
     expect(post.stage).toBe('READY');
@@ -502,6 +516,117 @@ describe('rebuildImageSet', () => {
     await expect(rebuildImageSet(3, Infinity)).rejects.toMatchObject({ status: 409 });
     seedPost({ id: 4, stage: 'READY', lockedUntil: new Date(Date.now() + 60_000) });
     await expect(rebuildImageSet(4, Infinity)).rejects.toMatchObject({ status: 409 });
+  });
+});
+
+// Design Ref: image-jobs §8.2 시나리오 5~10
+describe('image-jobs (IMAGE_PROVIDER=jobs)', () => {
+  const upload = { data: Buffer.from('img'), mediaType: 'image/jpeg', source: 'manual' };
+
+  async function readyWithRender() {
+    seedPost();
+    await advancePost(1, Infinity);
+    mode.value = 'jobs';
+  }
+
+  it('IMAGES 단계는 렌더 없이 계획만 저장하고, 마감이 없어도 advancePost가 끝난다', async () => {
+    mode.value = 'jobs';
+    seedPost();
+    const post = await advancePost(1, Infinity);
+
+    expect(post.stage).toBe('IMAGES');
+    expect(post.stageError).toBeNull();
+    expect(render).not.toHaveBeenCalled();
+    expect(aiService.planImages).toHaveBeenCalledTimes(1);
+    const plan = readyPlan();
+    expect([plan.cover, ...plan.sections].every((s: any) => !s.url)).toBe(true);
+    expect(posts.get(1)!.lockedUntil).toBeNull();
+    expect(logs).toHaveLength(0);
+
+    // 다시 불러도 같은 단계를 헛돌지 않고 그대로 돌려준다
+    const again = await advancePost(1, Infinity);
+    expect(again.imagePlan).toBe(post.imagePlan);
+    expect(aiService.planImages).toHaveBeenCalledTimes(1);
+  });
+
+  it('장면을 하나씩 올리면 채점하고, 마지막 장면에서 본문에 넣어 READY로 만든다', async () => {
+    mode.value = 'jobs';
+    seedPost();
+    await advancePost(1, Infinity);
+
+    const first = await attachImage(1, 0, upload);
+    expect(first).toMatchObject({ index: 0, url: 'https://blob.test/1.jpg', score: 5, remaining: 2, stage: 'IMAGES' });
+    await attachImage(1, 1, { ...upload, source: 'agy' });
+    const last = await attachImage(1, 2, upload);
+
+    expect(last).toMatchObject({ remaining: 0, stage: 'READY', completed: true });
+    const post = posts.get(1)!;
+    expect(post.content.match(/!\[/g)).toHaveLength(3);
+    expect(post.content).toContain('https://blob.test/3.jpg');
+    const plan = readyPlan();
+    expect(plan.provider).toBe('jobs');
+    expect(plan.sections[0]).toMatchObject({ source: 'agy', score: 5, checked: true });
+    expect(store).toHaveBeenCalledWith(upload.data, 'image/jpeg');
+    expect(logs.map((l) => l.event)).toEqual(['IMAGE_UPLOAD', 'IMAGE_UPLOAD', 'IMAGE_UPLOAD', 'POST_READY']);
+    expect(post.lockedUntil).toBeNull();
+  });
+
+  it('작업 대기가 아닌 장면·잠긴 글은 409, 없는 글·장면은 404', async () => {
+    await readyWithRender();
+    await expect(attachImage(1, 0, upload)).rejects.toMatchObject({ status: 409 });
+    await expect(attachImage(1, 9, upload)).rejects.toMatchObject({ status: 404 });
+    await expect(attachImage(99, 0, upload)).rejects.toMatchObject({ status: 404 });
+    posts.set(1, { ...posts.get(1)!, lockedUntil: new Date(Date.now() + 60_000) });
+    await expect(attachImage(1, 0, upload)).rejects.toMatchObject({ status: 409 });
+    expect(store).not.toHaveBeenCalled();
+  });
+
+  it('다시 생성은 렌더 없이 작업 대기로 두고, 올리면 본문의 이전 그림을 바꾼다', async () => {
+    await readyWithRender();
+    const before = posts.get(1)!.content;
+
+    const waiting = await regenerateImage(1, 2);
+    expect(render).toHaveBeenCalledTimes(3); // READY까지 만든 3장뿐
+    expect(waiting.content).toBe(before);
+    expect(readyPlan().sections[1]).toMatchObject({ pending: true, url: 'https://img.test/3.png' });
+
+    const result = await attachImage(1, 2, upload);
+    expect(result).toMatchObject({ stage: 'READY', remaining: 0, completed: false });
+    const post = posts.get(1)!;
+    expect(post.content).toContain('https://blob.test/1.jpg');
+    expect(post.content).not.toContain('https://img.test/3.png');
+    expect(readyPlan().sections[1].pending).toBeUndefined();
+  });
+
+  it('세트 다시 만들기는 본문 그림을 지우고 새 계획의 전 장면을 작업으로 둔다', async () => {
+    await readyWithRender();
+    const post = await rebuildImageSet(1, Infinity);
+
+    expect(post.stage).toBe('IMAGES');
+    expect(post.content).not.toContain('![');
+    expect(render).toHaveBeenCalledTimes(3);
+    const plan = readyPlan();
+    expect([plan.cover, ...plan.sections].every((s: any) => !s.url)).toBe(true);
+    expect(posts.get(1)!.lockedUntil).toBeNull();
+  });
+
+  it('작업 목록은 jobs 모드에서만 — render 모드는 크론이 그리는 중인 장면을 내놓지 않는다', async () => {
+    mode.value = 'jobs';
+    seedPost();
+    await advancePost(1, Infinity);
+    const listed = await listImageJobs();
+    expect(listed).toMatchObject({ scenes: 3, posts: 1 });
+    expect(listed.jobs.map((job) => job.index)).toEqual([0, 1, 2]);
+
+    mode.value = 'render';
+    expect(await listImageJobs()).toEqual({ scenes: 0, posts: 0, jobs: [] });
+  });
+
+  it('크론 이어하기 조건은 jobs 모드에서만 그림 대기 글을 뺀다', () => {
+    mode.value = 'jobs';
+    expect(waitingForImagesWhere()).toEqual({ NOT: { stage: 'IMAGES', imagePlan: { not: null } } });
+    mode.value = 'render';
+    expect(waitingForImagesWhere()).toEqual({});
   });
 });
 

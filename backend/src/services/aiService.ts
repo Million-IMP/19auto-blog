@@ -37,6 +37,10 @@ export type ImageScene = {
   // 채점을 시도했는지. 이어하기에서 같은 장면을 다시 채점하지 않는다.
   checked?: boolean;
   retried?: boolean;
+  // image-jobs 작업 대기: 새 그림을 기다린다. url이 있으면 새 그림이 올라올 때까지 이전 그림을 그대로 쓴다.
+  pending?: boolean;
+  // 이 장면 그림을 만든 곳 (image-jobs 업로드: 'agy' | 'manual')
+  source?: string;
 };
 
 export type ImageKind = 'news' | 'concept' | 'howto';

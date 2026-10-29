@@ -21,11 +21,16 @@ description: AI 초안 생성·자동화 파이프라인. Use when editing promp
   - `generateOutline`, `generateBody`, `polishBody`, `planImages`, `replanScene`, `evaluateTopic`
   - 모든 함수가 `askText`를 거친다. 토큰 제한에 걸리거나 시간 초과가 나면 오류를 던진다.
 - `imageProvider.ts`
-  - `IMAGE_PROVIDER`로 고른다. 기본값은 pollinations, `ideogram`은 `IDEOGRAM_API_KEY`가 필요하다.
-  - Ideogram 응답 주소는 만료되므로 받은 즉시 저장한다: `BLOB_READ_WRITE_TOKEN`이 있으면 Vercel Blob, 로컬은 `backend/generated-images` → `/api/images/:file`.
-  - 설정 확인(과금 없음): `node scripts/check-ideogram.js`
-  - prompt = style + 장면 prompt + must, negative_prompt = 기본 금지어 + avoid. magic_prompt는 기본 off.
+  - `imageMode()`만 `IMAGE_PROVIDER`를 읽는다. `jobs`면 서버는 그림을 만들지 않고, 비우면 pollinations로 렌더한다(과금 API 없음).
+  - `storeImage`: `BLOB_READ_WRITE_TOKEN`이 있으면 Vercel Blob, 로컬은 `backend/generated-images` → `/api/images/:file`.
+  - prompt = style + 장면 prompt + must (`fullPrompt`).
   - 이미지 아래에는 `*▲ caption (AI 생성 이미지)*` 설명글이 붙는다(`imageMarkdown`).
+- `imageJobs.ts` + `scripts/image-jobs.js` (`IMAGE_PROVIDER=jobs`)
+  - 작업 = `imagePlan` 장면 중 url이 없거나 `pending`인 것(새 테이블 없음). IMAGES 단계는 계획만 저장하고 기다린다. `advancePost`는 진행이 없으면 멈추고, 크론 이어하기 목록에서 대기 글을 뺀다(`waitingForImagesWhere`).
+  - `GET /api/image-jobs` 목록, `POST /api/image-jobs/:postId/:index` 업로드(운영자 전용, PNG·JPEG·WebP 4MB 이하, 파일 서명 검사) → 채점 → 마지막 장면이면 본문에 넣고 READY.
+  - 작업 프롬프트 = `fullPrompt` + avoid + 기본 금지어 + 글자 금지 문장(`jobPrompt`). negative prompt를 받지 않는 모델용이다.
+  - 다시 생성은 장면을 `pending`으로 두고 이전 그림을 유지한다. 세트 다시 만들기는 새 계획의 전 장면을 작업으로 둔다.
+  - PC: `npm run image-jobs -- pull | push | generate | run`. generate는 구독 로그인된 `agy -p … --output-format json`을 장면마다 1번 실행하고, 돌려준 대화 id의 transcript에서 "Final image path"를 찾아 `image-jobs/done/`으로 복사한다(최대 `IMAGE_JOBS_MAX`장).
 - `topicService.ts`
   - `evaluateInbox`, `draftFromTopic` (카드 1개당 초안 1개)
 - `publishService.ts`

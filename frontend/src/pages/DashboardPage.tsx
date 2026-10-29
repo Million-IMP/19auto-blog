@@ -22,7 +22,8 @@ type RuleItem = { id: number; title: string; isActive: boolean };
 type InboxItem = { id: number; content: string; createdAt: string };
 type TopicItem = { id: number; keyword: string; intent: string };
 type DraftItem = { id: number; title: string; stage: string; stageError: string | null; createdAt: string };
-type Summary = { inbox: InboxItem[]; blogDrafts: DraftItem[] };
+// imageJobs: PC 작업자가 채울 그림 수(IMAGE_PROVIDER=jobs). 이전 서버 응답에는 없어서 선택 필드다.
+type Summary = { inbox: InboxItem[]; blogDrafts: DraftItem[]; imageJobs?: { scenes: number; posts: number } };
 type AutoConfig = {
   enabled: boolean;
   batchSize: number;
@@ -318,6 +319,11 @@ export function DashboardPage() {
 
       {error && <Notice tone="danger" className="mb-4">{error}</Notice>}
       {autoMsg && <Notice tone="info" className="mb-4">{autoMsg}</Notice>}
+      {(summary.imageJobs?.scenes ?? 0) > 0 && (
+        <Notice tone="draft" className="mb-4">
+          이미지 대기 <b>{summary.imageJobs?.scenes}장</b> (글 {summary.imageJobs?.posts}개) — PC에서 <code className="break-all">npm run image-jobs -- run</code>을 실행하면 채워집니다.
+        </Notice>
+      )}
 
       <PressLine hot={hotStep} counts={[inboxCount, topics.length, activeMaterials.length + activeRules.length, writing.length, ready.length]} />
       <div className="stagger -mx-gutter grid snap-x snap-mandatory scroll-px-gutter auto-cols-[82%] grid-flow-col gap-3 overflow-x-auto px-gutter pb-2 sm:auto-cols-[45%] md:mx-0 md:scroll-px-0 md:px-0 lg:grid-flow-row lg:grid-cols-5 lg:overflow-visible">
