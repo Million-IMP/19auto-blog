@@ -1,4 +1,4 @@
-// Design Ref: docs/02-design/features/image-jobs.design.md §11.2.1 — 서버가 내놓은 이미지 작업을 PC 폴더로 받아 채우고 올린다. 별도 API 요금 없음.
+// Design Ref: docs/archive/2026-10/image-jobs/image-jobs.design.md §11.2.1 — 서버가 내놓은 이미지 작업을 PC 폴더로 받아 채우고 올린다. 별도 API 요금 없음.
 // npm run image-jobs -- pull      작업 → image-jobs/pending/<글>-<장면>.json(작업)·.txt(프롬프트만, 수동 복사용)
 // npm run image-jobs -- push      image-jobs/done/<글>-<장면>.(png|jpg|jpeg|webp) → 업로드 → image-jobs/uploaded/
 // npm run image-jobs -- generate  pending 작업마다 구독 로그인된 Antigravity CLI(agy)로 그림 1장 → done/

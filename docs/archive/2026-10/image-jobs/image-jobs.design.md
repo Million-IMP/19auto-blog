@@ -7,7 +7,7 @@
 > **Author**: jeh-lab + Claude
 > **Date**: 2026-10-28
 > **Status**: Draft
-> **Planning Doc**: [image-jobs.plan.md](../../01-plan/features/image-jobs.plan.md) (v0.3)
+> **Planning Doc**: [image-jobs.plan.md](./image-jobs.plan.md) (v0.3)
 > **Base**: `master` 58f8040 (PR #36까지) — 브랜치 `feat/image-jobs`
 
 ### Pipeline References

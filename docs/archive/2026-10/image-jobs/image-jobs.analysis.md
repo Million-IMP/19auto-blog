@@ -2,8 +2,8 @@
 
 > **Feature**: image-jobs
 > **Date**: 2026-10-30
-> **Plan**: [image-jobs.plan.md](../01-plan/features/image-jobs.plan.md) (v0.3)
-> **Design**: [image-jobs.design.md](../02-design/features/image-jobs.design.md) (v0.3, 설계안 C)
+> **Plan**: [image-jobs.plan.md](./image-jobs.plan.md) (v0.3)
+> **Design**: [image-jobs.design.md](./image-jobs.design.md) (v0.3, 설계안 C)
 > **Match Rate**: 97% → **99%** (런타임 포함 공식, Act-1 뒤 — §8)
 > **구현**: 브랜치 `feat/image-jobs` (기준 master 58f8040)
 
@@ -192,7 +192,7 @@ Vercel 환경변수 이름 확인(10/30, 값은 보지 않음): Production에 `I
 | `listImageJobs`: jobs 모드가 아니면 `{ scenes: 0, posts: 0, jobs: [] }` | `backend/src/services/draftPipeline.ts` |
 | vitest "작업 목록은 jobs 모드에서만" + prisma 목에 `findMany` | `backend/src/services/draftPipeline.test.ts` |
 | `findImage` 대체 방법: 수정 시각이 가장 늦은 그림 | `scripts/image-jobs.js` |
-| Design v0.3: 검사 순서, render 모드 빈 목록 | `docs/02-design/features/image-jobs.design.md` |
+| Design v0.3: 검사 순서, render 모드 빈 목록 | `docs/archive/2026-10/image-jobs/image-jobs.design.md` |
 
 재검증: 백엔드 테스트 182/182, 타입체크 exit 0, 스크립트 로드 정상. 화면 코드는 바뀌지 않아 린트·빌드·모바일 점검은 Do 결과(통과)를 그대로 쓴다.
 

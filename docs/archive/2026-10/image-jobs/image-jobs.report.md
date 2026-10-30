@@ -4,7 +4,7 @@
 > **Date**: 2026-10-30
 > **Author**: jeh-lab + Claude
 > **Match Rate**: 97% → **99%** (Act-1 뒤)
-> **Status**: Completed (로컬 검증 완료 · 운영 배포는 Vercel 환경변수 변경 뒤)
+> **Status**: Completed (10/30 운영 배포 · 크론 jobs 대기 확인 · 운영 업로드는 사용자 `push` 대기)
 
 ---
 
@@ -17,7 +17,7 @@
 | 기능 | Ideogram을 지우고, 서버는 그림을 만들지 않고 "이미지 작업"만 남긴다. PC에서 구독 로그인된 Antigravity CLI(`agy`, Nano Banana)나 사람이 그림을 채워 올린다 |
 | 기간 | 2026-10-26 ~ 10-30 (Plan v0.1~0.3 → Design v0.1~0.3 → Do → Check → Act-1 → Report) |
 | 설계안 | C 균형 — 스키마 변경 없이 `imagePlan`이 큐, 순수 로직 `imageJobs.ts`, 모드 판단은 `imageMode()` 한 곳 |
-| PR | 이 보고서와 함께 `feat/image-jobs` |
+| PR | [#37](https://github.com/Million-IMP/19auto-blog/pull/37) — 10/30 머지(master `0bdfe2a`)·운영 배포 |
 
 ### 1.2 Results Summary
 
@@ -69,9 +69,9 @@
 
 | 단계 | 문서 |
 |---|---|
-| Plan | [image-jobs.plan.md](../01-plan/features/image-jobs.plan.md) v0.3 |
-| Design | [image-jobs.design.md](../02-design/features/image-jobs.design.md) v0.3 |
-| Check | [image-jobs.analysis.md](../03-analysis/image-jobs.analysis.md) |
+| Plan | [image-jobs.plan.md](./image-jobs.plan.md) v0.3 |
+| Design | [image-jobs.design.md](./image-jobs.design.md) v0.3 |
+| Check | [image-jobs.analysis.md](./image-jobs.analysis.md) |
 | 결정 기록 | gbrain `decisions/19auto-blog-image-jobs` |
 
 ---
@@ -121,10 +121,10 @@
 
 | 항목 | 이유 | 다음 |
 |---|---|---|
-| 운영 배포 | Vercel 환경변수 변경은 사용자 확인 뒤 | §8.1 |
-| 운영 업로드 1장 확인 | `express.raw`가 Vercel 함수에서 바이트를 그대로 받는지는 로컬에서만 봤다 | 배포 직후 `npm run image-jobs -- run` (운영 대상) |
-| 크론 전체 실행 E2E | 운영 사본 다른 글의 본문 단계가 Claude API를 부른다 | 운영 배포 뒤 첫 크론 결과(활동 기록)로 확인 |
-| 멈춘 글 29개 | 일괄 이어하기 제외(사용자 결정) | 글마다 "이어하기" |
+| ~~운영 배포~~ | 10/30 완료 (§7) | — |
+| 운영 업로드 확인 | `express.raw`가 Vercel 함수에서 바이트를 그대로 받는지는 로컬에서만 봤다. 운영 작업으로 만든 그림은 `image-jobs/done`에 있다 | 사용자가 별도 PowerShell에서 `npm run image-jobs -- push` (운영자 비밀번호) |
+| ~~크론 전체 실행 E2E~~ | 10/30 00:00 UTC 크론이 만든 #128이 본문 완성 뒤 오류 없이 그림 대기 (§7) | — |
+| 멈춘 글 이미지 | 30개 글은 이어하기로 작업 대기가 됐다(§7). 구독 이미지 한도 때문에 199장은 여러 번 나눠 만든다 | 한도가 풀릴 때마다 `generate` → `push` |
 | 개인정보처리방침 시행일 | "시행 7일 전 고지" 조항 — 사용자 결정 | 시행일 유지 또는 새 날짜 |
 
 ### 4.2 Cancelled / On Hold
@@ -174,8 +174,25 @@
 
 ### 6.3 What to Try Next
 
-- 구독 이미지 한도가 실제로 얼마인지 며칠 운영하며 기록(`IMAGE_JOBS_MAX` 조정 근거)
-- 기기 화면이 흐리게 그려지는 문제는 `image-device-text`(7번)에서 함께 본다
+- 구독 이미지 한도가 실제로 얼마인지 며칠 운영하며 기록(`IMAGE_JOBS_MAX` 조정 근거). 첫 관찰은 §7: 10장째에 429
+- 한도에 걸리면 `agy` 대화 기록의 `quotaResetTimeStamp`를 읽어 "몇 시에 풀림"을 출력하면 다음 실행 시각을 바로 알 수 있다
+- 기기 화면이 흐리게 그려지는 문제는 `image-device-text`(7번)에서 함께 본다. 운영 첫 묶음에서는 반대로 화면을 돌려 달라는 장면 3장에 코드 줄이 보였다(읽히는 글자는 0)
+
+---
+
+## 7. 운영 적용 (2026-10-30)
+
+| 항목 | 결과 |
+|---|---|
+| 환경변수 | 머지 직전 `IDEOGRAM_*`가 그대로라 사용자 선택("Claude가 env 바꾸고 머지")으로 vercel CLI가 `IMAGE_PROVIDER=jobs`로 바꾸고 `IDEOGRAM_API_KEY`·`IDEOGRAM_RENDERING_SPEED`를 지움. 이미지 관련 변수는 `IMAGE_PROVIDER`·`BLOB_READ_WRITE_TOKEN`만 남음 |
+| 첫 운영 빌드 | **실패** — 빌드 postinstall `prisma db push`가 Neon에 `P1001`(약 5초). 같은 시각 운영 API는 200이지만 4~6초(Neon 깨어나는 지연). 실패 중에도 이전 배포가 계속 서비스 |
+| 재배포 | `vercel redeploy <실패 배포> --target production` → 2분 만에 READY, 19auto-blog.vercel.app 연결. `/api/stats`·`/api/posts` 200, `GET /api/image-jobs` 200, 로그인 없는 업로드 401 |
+| 크론 | 00:00 UTC 크론이 만든 #128(00:00:39)과 다음 #129가 본문 완성 뒤 `stageError` 없이 그림 대기 → jobs 모드 크론 동작 확인 |
+| 멈춘 글 | #97은 Ideogram이 5장을 만든 뒤 멈춘 글이라 1장만 대기. #98~#127 30개는 모두 계획이 있고 그림 0장 → 이어하기(AI 호출 없음, 30/30 성공). 작업 목록 209장(글 34개) |
+| 생성 | 운영 작업으로 `agy` 10장(#97 1·#128 5·#98 4), 장면당 52~102초, 읽히는 글자 0/10 |
+| 구독 한도 | 10장째 다음 장면에서 `gemini-3.1-flash-image` 429 `RESOURCE_EXHAUSTED`("Your quota will reset after 1h28m"). 스크립트가 한도로 판단해 멈추고 남은 작업은 `pending/`에 남김(설계대로) |
+
+남은 이미지 199장은 한도가 풀릴 때마다 나눠 만든다. 크론이 하루 약 5개 글(#125~#129가 18시간 사이)을 만들어 그림이 하루 약 30장씩 늘어나므로, 한도 안에서 새 글과 밀린 글을 함께 소화할 수 있는지는 며칠 관찰한다.
 
 ---
 
@@ -183,10 +200,10 @@
 
 ### 8.1 Immediate (사용자)
 
-1. Vercel Production `IMAGE_PROVIDER`를 `jobs`로 바꾸고 `IDEOGRAM_API_KEY`·`IDEOGRAM_RENDERING_SPEED`를 지운다 (`BLOB_READ_WRITE_TOKEN`은 이미 있다)
-2. PR 머지 → 운영 배포
-3. 별도 PowerShell 창에서 `$env:APP_PASSWORD = Read-Host` → `npm run image-jobs -- run` (운영 대상, 한 번에 최대 6장)
-4. 멈춘 글은 작업실에서 글마다 "이어하기"
+1. 별도 PowerShell 창에서 `$env:APP_PASSWORD = Read-Host` → `npm run image-jobs -- push` (만들어 둔 그림 올리기 — 운영 업로드 첫 확인)
+2. 한도가 풀리면 `npm run image-jobs -- run` 반복 (한 번에 최대 6장, `IMAGE_JOBS_MAX`로 조정)
+3. 개인정보처리방침 시행일 결정
+4. (권장) `APP_PASSWORD`를 더 긴 값으로 교체 후 재배포 — 대화에 값이 남음
 
 ### 8.2 Next PDCA Cycle
 
@@ -199,3 +216,4 @@
 | Version | Date | Changes | Author |
 |---------|------|---------|--------|
 | 1.0 | 2026-10-30 | 완료 보고 | jeh-lab + Claude |
+| 1.1 | 2026-10-30 | §7 운영 적용(배포 실패·재배포, 크론 확인, 멈춘 글 30개 이어하기, 구독 한도 첫 관찰), §4.1·§8.1 갱신 | jeh-lab + Claude |
